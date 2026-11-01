@@ -23,7 +23,7 @@ came from can be read against each other without an offset in between.
 | `note` | string | the venues a trade ran through, joined by `+` |
 | `where` | string | `blk <number>` on an EVM chain, `slot <number>` on Solana |
 | `key` | string | `<transaction>#<log index>` on an EVM chain, the signature on Solana |
-| `order_id` | string | Relay's 32-byte order id, empty when the trade did not cross, `?` when a fill's transaction could not be fetched |
+| `order_id` | string | Relay's 32-byte order id, empty when the trade did not cross, `?` when a fill's transaction could not be fetched. `?` is not an id and joins nothing |
 
 ## Amounts
 
@@ -52,7 +52,7 @@ either side of either join.
 ```python
 import pandas as pd
 rows = pd.read_json("scripts/runs/00_listen_fomo-<time>.jsonl", lines=True)
-crossed = rows[rows.order_id != ""]
+crossed = rows[~rows.order_id.isin(["", "?"])]
 buys = crossed[(crossed.chain == "SOL") & (crossed.kind == "PAY")].merge(
     crossed[(crossed.chain != "SOL") & (crossed.kind == "BUY")], on="order_id", suffixes=("_paid", "_got")
 )
@@ -86,20 +86,23 @@ it is reported as a settlement check under the table.
 |---|---|
 | Solana | swaps that never left it |
 | each EVM chain | crossing trades both ways: buys delivered there, sells swapped there |
-| `chain unknown` | Solana payments whose delivery was never seen |
+| `chain unknown` | Solana payments whose delivery was not matched |
 
 A payment on an EVM chain that a Solana payout settles is cash moving to Solana, not a trade, so it
-is no volume and is printed as a count beneath the table. One whose other leg was never seen is
-counted there too: most such payments are cash moving, so none of them is valued as a trade. A `BUY` with no order id was paid with
-cash already on its EVM chain, inside the wallet's own operation; the row names the token but not
-the cash spent, so it is counted unpriced beneath the table rather than valued.
+is no volume and is printed as a count beneath the table. One whose other leg was not matched is
+counted there too: most such payments are cash moving, so none of them is valued as a trade. A
+`BUY` with no order id was paid with cash already on its EVM chain, inside the wallet's own
+operation; the row names the token but not the cash spent, so it is counted unpriced beneath the
+table rather than valued. A `BUY` whose order id is `?` did cross, but its payment cannot be found
+by it: the payment is valued under `chain unknown`, and the buy is counted beneath the table.
 
-`chain unknown` is what the recordings cannot place. A payment carries an order id and an amount
-and no destination, so the destination is the delivery on the far side. With every EVM chain FOMO
-trades on listened to, a payment lands in this row when its far leg fell outside the run, when the
-run had a chain switched off, or when it funded something this repository does not read —
-Hyperliquid, where FOMO's perpetuals trade, or a withdrawal of cash to an outside address. It is real FOMO volume on an unplaced chain, so it is
-counted and named rather than dropped; every chain above it is a floor and this row a ceiling.
+`chain unknown` is payment value the recordings cannot place, not volume proven to be a trade. A
+payment carries an order id and an amount and no destination, so the destination is the delivery on
+the far side. With every EVM chain FOMO trades on listened to, a payment lands in this row when its
+far leg fell outside the run, when the run had a chain switched off, or when it funded something
+this repository does not read: a deposit to Hyperliquid, where FOMO's perpetuals trade, or a
+withdrawal of cash to an outside address. It is counted and named rather than dropped; every chain
+above it is a floor and this row a ceiling.
 
 A sell is missing rather than unknown when the run was not listening to the chain it ran on: what
 marks a trade as FOMO's sits on that chain, so its payout on Solana has nothing to match against
@@ -143,5 +146,8 @@ from recordings of every chain on 2026-10-30.
 
 From Relay's API. That a payment can fund Hyperliquid: of 50 Solana payments recorded between
 2026-09-06 and 2026-10-30 whose delivery no listener saw, Relay's records placed one on Hyperliquid.
-The other 49 were delivered on chains these listeners now read, or refunded. Nothing in this
-document decodes from the API.
+The other 49 were delivered on chains these listeners now read, or refunded. That a payment can be
+a withdrawal: in a seven-minute recording of every chain on 2026-10-30, 13 Solana payments had no
+delivery in the run, and Relay's records showed all 13 delivered as USDC rather than a token — 9 on
+Hyperliquid, 4 to plain addresses on Ethereum and Base. Nothing in this document decodes from the
+API.

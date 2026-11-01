@@ -132,18 +132,22 @@ def count(rows):
     def of_kind(chain, kind):
         return [row for row in rows if row.get("chain") == chain and row.get("kind") == kind]
 
+    def joins(row):
+        # Empty never crossed, and `?` is a lookup that failed: neither names an order.
+        return row.get("order_id") not in ("", None, UNREAD_ORDER)
+
     def order_ids(kept):
-        return {row["order_id"] for row in kept if row.get("order_id")}
+        return {row["order_id"] for row in kept if joins(row)}
 
     def on_evm(kind):
         return [row for code in NAMES for row in of_kind(code, kind)]
 
     # Which EVM chain each delivered order landed on: the payment never says, the fill does.
-    landed = {row["order_id"]: NAMES[row["chain"]] for row in on_evm("BUY") if row.get("order_id")}
+    landed = {row["order_id"]: NAMES[row["chain"]] for row in on_evm("BUY") if joins(row)}
     sold = order_ids(on_evm("SELL"))  # sells FOMO's wallets made on any EVM chain
     paid_out = order_ids(of_kind("SOL", "FILL"))  # sells Relay was seen settling on Solana
 
-    volume, missing = {}, Counter()
+    volume, missing, unlinked = {}, Counter(), 0
 
     def add(chain, line, value):
         row = volume.setdefault((chain, line), {"trades": 0, "usd": 0.0})
@@ -158,12 +162,13 @@ def count(rows):
         add("Solana", "trades that started and finished on Solana", value)
 
     # A buy with no order id never crossed: the wallet paid with cash already on that chain,
-    # inside its own operation. The row names the token and not the cash spent.
+    # inside its own operation. The row names the token and not the cash spent. A buy whose
+    # order id could not be read did cross, and its payment is priced under `chain unknown`.
     for row in on_evm("BUY"):
         if not row.get("order_id"):
             missing["buys paid with cash already on their EVM chain: the token is named, the cash is not"] += 1
         elif row["order_id"] == UNREAD_ORDER:
-            missing["buys whose order id could not be read, so their payment cannot be found"] += 1
+            unlinked += 1
 
     # A payment names its size and never its token. The buy on the other chain names the
     # token and never a price, so the amount is read here and the chain is read there.
@@ -174,7 +179,7 @@ def count(rows):
         elif row.get("order_id") in landed:
             add(landed[row["order_id"]], "buys — paid for on Solana, token delivered here", value)
         else:
-            add("chain unknown", "buys whose delivery was never seen: another chain, or missed by the run", value)
+            add("chain unknown", "payments whose delivery was not matched: a buy, or cash leaving FOMO", value)
 
     # A sell is readable end to end on its EVM chain: the token left the wallet and the
     # proceeds went into Relay's depository in the same transaction. That is the sell's
@@ -200,8 +205,8 @@ def count(rows):
             add(landed[row["order_id"]], "buys — paid for on another EVM chain, token delivered here", value)
         else:
             # Most cash deposited on an EVM chain is moving to Solana, so one whose other leg
-            # fell outside the run is counted, never folded into volume at a guess.
-            missing["payments on an EVM chain whose other leg was never seen: cash moving, or a buy"] += 1
+            # was not matched is counted, never folded into volume at a guess.
+            missing["payments on an EVM chain whose other leg was not matched: cash moving, or a buy"] += 1
 
     # What Relay and the solver keep, read off the two ends of the same sells rather than
     # quoted from anywhere: what went into the depository against what came out on Solana.
@@ -214,7 +219,7 @@ def count(rows):
             into, out = into + before, out + after
     kept = (into - out) / into if into else None
 
-    return volume, missing, len(sold & paid_out), kept, moved
+    return volume, missing, len(sold & paid_out), kept, moved, unlinked
 
 
 def by_chain(volume, chain):
@@ -234,7 +239,7 @@ def main():
         return
     print(f"covered  {covered(rows) / 60:.1f} min of it was recorded — these totals are of that, not of the window")
 
-    volume, missing, settled, kept, moved = count(rows)
+    volume, missing, settled, kept, moved, unlinked = count(rows)
     total = sum(row["usd"] for row in volume.values())
     trades = sum(row["trades"] for row in volume.values())
 
@@ -260,15 +265,17 @@ def main():
             name = ""
 
     print("\nA trade that crosses chains is counted once, on the chain its swap ran on, so no")
-    print("dollar above is counted twice. `chain unknown` is real FOMO volume that could not be")
-    print("placed — a delivery outside the run, or on a chain the run was not listening to — so")
-    print("that row is a ceiling and every chain above it a floor.")
+    print("dollar above is counted twice. `chain unknown` is FOMO payments whose delivery was not")
+    print("matched — a buy outside the run or on a chain switched off, a Hyperliquid deposit, or a")
+    print("withdrawal — so that row is a ceiling and every chain above it a floor.")
 
     sells = sum(row["trades"] for (_, line), row in volume.items() if line.startswith("sells"))
     cut = f", for {kept * 100:.2f}% less than they deposited" if kept else ""
     print(f"\n{settled} of {sells} sells were also seen being paid out on Solana{cut}.")
     if moved:
         print(f"{moved} payments on EVM chains were cash moving to Solana, paid out there as cash: not volume.")
+    if unlinked:
+        print(f"{unlinked} buys on EVM chains had an unreadable order id: their payments are in `chain unknown`.")
     if missing:
         print("\nNot priced, and so not in the totals above:")
         for label, n in missing.most_common():
