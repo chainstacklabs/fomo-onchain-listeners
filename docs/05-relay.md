@@ -71,8 +71,10 @@ The order id is written on both chains, so the two legs join by reading them:
 finds the other.
 
 > [!NOTE]
-> Relay's own API is on its way out: version 2 was throttled on 2026-09-01 and retires on
-> 2026-11-24, and version 3 requires a key.
+> Relay's own API is on its way out. `/requests/v2` answers without a key until its sunset on
+> 2026-11-24; its successor, `/requests/v3`, refuses any request without an `x-api-key` header
+> ([migration guide](https://docs.relay.link/references/api/api_guides/migrating-to-requests-v3)). Nothing here depends on either: both legs carry the order id
+> onchain.
 
 ## The settlement chain
 
@@ -109,4 +111,6 @@ re-checked on a run.
 
 From Relay's documentation and API. The order lifecycle, the oracle's part in reimbursing a solver,
 and how a solver receives the order data behind an id — read from `docs.relay.link` and
-`api.relay.link` on 2026-08-31. Nothing in this document decodes from either.
+`api.relay.link` on 2026-08-31. The sunset date and the successor are the `Sunset` and `Link`
+headers `/requests/v2` returned on 2026-11-01, and `/requests/v3` answered without a key with a 400
+naming the missing `x-api-key`. Nothing in this document decodes from either.

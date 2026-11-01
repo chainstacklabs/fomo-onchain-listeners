@@ -74,7 +74,7 @@ that pays its own gas on the same delegation would pass them, and none has been 
 | Robinhood Chain | the wallet's code is the EIP-7702 delegation every FOMO wallet carries |
 | BNB Smart Chain, Base, Ethereum, Monad | the same delegation, and no paymaster on the depositor's operation; for a buy, the delegation, or the order id of a FOMO payment on Solana |
 | Solana | the co-signer that signs and pays for every FOMO transaction |
-| Relay's API | the `referrer` field on each request record |
+| Relay's API | the `referrer` field on each request record; keyless only until 2026-11-24, when `/requests/v2` is sunset |
 | Relay's chain | none — solvers and assets are visible, the application behind an order is not |
 
 > [!WARNING]

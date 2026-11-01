@@ -690,7 +690,7 @@
       "the websocket acks a subscription on the onchain order id and delivers nothing",
       "pending records never carry currencyOut: 353 requests tracked, 34 transitions, 0 exceptions",
       "records carry referrer:'fomo' - Relay's data labels the integrator",
-      "v2 deprecated: throttled 2026-09-01, retired 2026-11-24; v3 requires x-api-key",
+      "v2 deprecated 2026-07-22, sunset 2026-11-24 (Deprecation and Sunset headers, read 2026-11-01); successor /requests/v3 returns 400 without an x-api-key header",
       "Not needed for the join. Both legs carry the order id onchain, so nothing here depends on this API."
     ]
   },
