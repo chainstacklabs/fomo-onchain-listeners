@@ -106,7 +106,7 @@ def resolve(topic0):
     for _ in range(2):
         try:
             u = f"https://www.4byte.directory/api/v1/event-signatures/?hex_signature={topic0}"
-            req = urllib.request.Request(u, headers={"User-Agent": "robinhood-fomo/1.0"})
+            req = urllib.request.Request(u, headers={"User-Agent": "fomo-onchain-listeners/1.0"})
             d = json.load(urllib.request.urlopen(req, timeout=15))
             r = [x["text_signature"] for x in d.get("results", [])]
             if r:

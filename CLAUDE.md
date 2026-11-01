@@ -1,4 +1,4 @@
-# robinhood-fomo
+# fomo-onchain-listeners
 
 Reverse-engineer how the **FOMO** trading app works onchain, on **Solana** and on every EVM chain
 it trades on — **Robinhood Chain, BNB Smart Chain, Base, Ethereum and Monad**. Two outputs, interleaved rather than sequential: a technical reference in `docs/`, and
