@@ -256,15 +256,22 @@ def native_deposit(log):
     return int(word(data, 1), 16), "0x" + word(data, 2)
 
 
+# The order id of a fill whose transaction could not be fetched. Empty would say the trade
+# never crossed, which is a claim about the trade; this is a claim about the lookup.
+UNREAD_ORDER = "?"
+
+
 def order_from_calldata(info):
     """The Relay order id a solver's fill carries: the last word of the router call.
 
     This is the whole cross-chain join — the same id the deposit on the other chain
     names — with no Relay API in the path. Empty for any transaction that is not a
     router call, which is every transaction that is not a fill. `info` is an
-    `eth_getTransactionByHash` result.
+    `eth_getTransactionByHash` result, None when the lookup failed.
     """
-    if not info or (info.get("to") or "").lower() not in ROUTERS:
+    if info is None:
+        return UNREAD_ORDER
+    if (info.get("to") or "").lower() not in ROUTERS:
         return ""
     calldata = info["input"][2:]
     return "0x" + calldata[-64:] if len(calldata) >= 64 else ""

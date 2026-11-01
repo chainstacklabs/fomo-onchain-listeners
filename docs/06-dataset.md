@@ -23,7 +23,7 @@ came from can be read against each other without an offset in between.
 | `note` | string | the venues a trade ran through, joined by `+` |
 | `where` | string | `blk <number>` on an EVM chain, `slot <number>` on Solana |
 | `key` | string | `<transaction>#<log index>` on an EVM chain, the signature on Solana |
-| `order_id` | string | Relay's 32-byte order id, empty when the trade did not cross |
+| `order_id` | string | Relay's 32-byte order id, empty when the trade did not cross, `?` when a fill's transaction could not be fetched |
 
 ## Amounts
 
@@ -86,10 +86,11 @@ it is reported as a settlement check under the table.
 |---|---|
 | Solana | swaps that never left it |
 | each EVM chain | crossing trades both ways: buys delivered there, sells swapped there |
-| `chain unknown` | payments whose other leg was never seen |
+| `chain unknown` | Solana payments whose delivery was never seen |
 
 A payment on an EVM chain that a Solana payout settles is cash moving to Solana, not a trade, so it
-is no volume and is printed as a count beneath the table. A `BUY` with no order id was paid with
+is no volume and is printed as a count beneath the table. One whose other leg was never seen is
+counted there too: most such payments are cash moving, so none of them is valued as a trade. A `BUY` with no order id was paid with
 cash already on its EVM chain, inside the wallet's own operation; the row names the token but not
 the cash spent, so it is counted unpriced beneath the table rather than valued.
 
@@ -97,7 +98,7 @@ the cash spent, so it is counted unpriced beneath the table rather than valued.
 and no destination, so the destination is the delivery on the far side. With every EVM chain FOMO
 trades on listened to, a payment lands in this row when its far leg fell outside the run, when the
 run had a chain switched off, or when it funded something this repository does not read —
-Hyperliquid, where FOMO's perpetuals trade. It is real FOMO volume on an unplaced chain, so it is
+Hyperliquid, where FOMO's perpetuals trade, or a withdrawal of cash to an outside address. It is real FOMO volume on an unplaced chain, so it is
 counted and named rather than dropped; every chain above it is a floor and this row a ceiling.
 
 A sell is missing rather than unknown when the run was not listening to the chain it ran on: what

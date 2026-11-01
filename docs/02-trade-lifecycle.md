@@ -119,7 +119,9 @@ already on an EVM chain was one of 12 EVM buys in a ten-minute recording of ever
 2026-10-30: a Base wallet carrying FOMO's delegation, in its own unsponsored operation, received
 the token from Relay's executor inside a `handleOps` bundle. The fee payers, the zero
 `actualGasCost` and the zero paymaster field were read on Robinhood Chain on 2026-09-08, and the
-zero paymaster on FOMO's operations on every EVM chain on 2026-10-30. Cash moving to Solana was
+zero paymaster on FOMO's operations on every EVM chain on 2026-10-30. The zero `actualGasCost`
+was read again on every EVM chain on 2026-11-01, across 24 unsponsored FOMO operations recorded
+on the five chains. Cash moving to Solana was
 observed on 2026-10-30, when a five-minute recording of every chain joined 19 stablecoin deposits
 on EVM chains to Solana payouts carrying the same order id. The token-account rent is
 `getMinimumBalanceForRentExemption(165)` = 1,855,569 lamports, read 2026-09-09. The pool fees are

@@ -95,9 +95,12 @@ absence of a paymaster is the test on every EVM chain.
 Every one of those requests passes through a single contract, and that contract is what makes this
 chain readable. The standard calls it the EntryPoint; this reference calls it the **operations
 contract**. A bundler hands it a batch of signed requests; it checks each signature, calls the
-wallet that signed, and writes one log line per action carrying that wallet's address and its
-paymaster. Nothing a FOMO wallet does reaches the chain any other way, so a single subscription to
-that one contract is the entire feed of FOMO activity on its chain.
+wallet that signed, and writes one log line per operation carrying that wallet's address and its
+paymaster; one batch holds many operations, each closed by its own line. Nothing a FOMO wallet does
+reaches the chain any other way, so a single subscription to that one contract is the entire feed
+of what FOMO wallets sign on its chain. A token delivered to a wallet is not among them: the solver
+sends it, in a transaction of its own, and it is read from the `Transfer` logs of Relay's
+executor.
 
 The standard has been revised, and each revision is a separate contract at its own address, all of
 them live at once. FOMO uses **version 0.8** and nothing else — the version that accepts the 7702

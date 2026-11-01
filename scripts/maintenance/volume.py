@@ -6,7 +6,7 @@ Every trade is counted once, on the leg that names its size in cash:
   each EVM chain   PAY   cash left Solana and the token was delivered on that chain, which
                          the Relay order id on both legs proves
                    SELL  a token swapped on that chain, proceeds handed to Relay
-  chain unknown    PAY   cash left a chain and the delivery was never seen, so which chain
+  chain unknown    PAY   cash left Solana and the delivery was never seen, so which chain
                          ran the swap is unknown
 
 The EVM chains are the rows of shared/evm.py's `CHAINS`, so a chain added there is counted
@@ -49,11 +49,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.evm import CHAINS as EVM
+from shared.evm import UNREAD_ORDER
 
 RUNS = Path(__file__).parent.parent / "runs"
 
 # A stablecoin is worth a dollar. Every other asset is counted and reported unpriced.
-STABLES = {"USDC", "USDG", "USDT"}
+STABLES = {"USDC", "USDG", "USDT", "USDT0"}
 UNPRICED = "amounts in no stablecoin — a native-asset trade, or a `?` the chain would not decode"
 
 # The order the table reads in. The unknown row is last: it is the residue of the rest.
@@ -161,6 +162,8 @@ def count(rows):
     for row in on_evm("BUY"):
         if not row.get("order_id"):
             missing["buys paid with cash already on their EVM chain: the token is named, the cash is not"] += 1
+        elif row["order_id"] == UNREAD_ORDER:
+            missing["buys whose order id could not be read, so their payment cannot be found"] += 1
 
     # A payment names its size and never its token. The buy on the other chain names the
     # token and never a price, so the amount is read here and the chain is read there.
@@ -196,7 +199,9 @@ def count(rows):
         elif row.get("order_id") in landed:
             add(landed[row["order_id"]], "buys — paid for on another EVM chain, token delivered here", value)
         else:
-            add("chain unknown", "payments on an EVM chain whose other leg was never seen", value)
+            # Most cash deposited on an EVM chain is moving to Solana, so one whose other leg
+            # fell outside the run is counted, never folded into volume at a guess.
+            missing["payments on an EVM chain whose other leg was never seen: cash moving, or a buy"] += 1
 
     # What Relay and the solver keep, read off the two ends of the same sells rather than
     # quoted from anywhere: what went into the depository against what came out on Solana.

@@ -3,8 +3,8 @@
 Every address the listeners and the docs rely on, per chain and per layer. The machine-readable
 copy is [`../scripts/maintenance/registry.json`](../scripts/maintenance/registry.json), and
 [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py) re-reads it against
-the live chains: Robinhood Chain in depth, every other EVM chain for the contracts and cash below,
-and Solana when a Solana endpoint is set. Relay's own chain has a separate RPC and is not covered.
+the live chains whose endpoints are set: Robinhood Chain in depth, every other EVM chain for the
+contracts and cash below, and Solana. A chain without its endpoint is skipped and named. Relay's own chain has a separate RPC and is not covered.
 
 To look one up by eye: [robinscan.io](https://robinscan.io) for Robinhood Chain,
 [bscscan.com](https://bscscan.com), [basescan.org](https://basescan.org),

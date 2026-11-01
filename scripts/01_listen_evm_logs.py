@@ -63,6 +63,7 @@ from shared.evm import (
     NATIVE_DEPOSIT,
     SYMBOL,
     TRANSFER,
+    UNREAD_ORDER,
     USEROP,
     VENUES,
     address_in_topic,
@@ -171,7 +172,7 @@ async def order_of(ask, cache, tx):
         try:
             info = await ask("eth_getTransactionByHash", [tx])
         except Exception:
-            return ""
+            return UNREAD_ORDER
         cache[tx] = order_from_calldata(info)
     return cache[tx]
 

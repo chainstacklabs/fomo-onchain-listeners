@@ -90,7 +90,7 @@ trade as they arrive, and prints them as one feed. Every transport also runs on 
 addresses and topics they decode against are recorded in
 [`scripts/maintenance/registry.json`](scripts/maintenance/registry.json), which
 [`maintenance/verify_registry.py`](scripts/maintenance/verify_registry.py) re-checks against every
-chain.
+chain whose endpoint is set.
 
 | Script | Chain | What lands in the feed | Transport |
 |---|---|---|---|

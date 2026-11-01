@@ -339,9 +339,9 @@ no payouts means the address, not the market. `maintenance/verify_registry.py` c
 
 How well a transport is served is a property of the endpoint behind it as much as of the protocol.
 [`maintenance/compare_listeners.py`](../scripts/maintenance/compare_listeners.py) subscribes to
-the four FOMO-keyed transports at once on one event loop, keys every event by transaction and log
-index on Robinhood Chain and by signature on Solana, and compares transports only against others
-on their own chain over the range all of them covered. The payout pair stays out of it: grouping
+the FOMO-keyed transports named, or all of them, at once on one event loop, keys every event by
+transaction and log index on an EVM chain and by signature on Solana, and compares transports only
+against others on their own chain over the range all of them covered. The payout pair stays out of it: grouping
 is by chain, so the two Solana subjects would each be charged for rows the other was never
 subscribed to. Per transport it reports what it saw, how often it was first, its median and
 90th-percentile lag behind whichever saw a trade soonest, and how many trades another transport on
