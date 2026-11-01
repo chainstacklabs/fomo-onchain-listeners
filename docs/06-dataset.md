@@ -46,8 +46,8 @@ Filter on a leading `?` before summing anything.
 
 `order_id` is the key. A buy is a Solana `PAY` and a `BUY` on an EVM chain; a sell is a `SELL` on
 an EVM chain and a Solana `FILL`; cash moving to Solana is a `PAY` on an EVM chain and a Solana
-`FILL`. Both legs carry the same id, and the id is unique: 40,571 recorded rows held no duplicate on
-either side of either join.
+`FILL`. Both legs carry the same id, and the id is unique: 19,681 rows recorded on every chain
+held no duplicate on either side of any of the three joins.
 
 ```python
 import pandas as pd
@@ -94,15 +94,18 @@ counted there too: most such payments are cash moving, so none of them is valued
 `BUY` with no order id was paid with cash already on its EVM chain, inside the wallet's own
 operation; the row names the token but not the cash spent, so it is counted unpriced beneath the
 table rather than valued. A `BUY` whose order id is `?` did cross, but its payment cannot be found
-by it: the payment is valued under `chain unknown`, and the buy is counted beneath the table.
+by it, so the buy is counted beneath the table; a Solana payment for it, if the run holds one, is
+valued under `chain unknown`.
 
 `chain unknown` is payment value the recordings cannot place, not volume proven to be a trade. A
 payment carries an order id and an amount and no destination, so the destination is the delivery on
 the far side. With every EVM chain FOMO trades on listened to, a payment lands in this row when its
-far leg fell outside the run, when the run had a chain switched off, or when it funded something
-this repository does not read: a deposit to Hyperliquid, where FOMO's perpetuals trade, or a
-withdrawal of cash to an outside address. It is counted and named rather than dropped; every chain
-above it is a floor and this row a ceiling.
+far leg fell outside the run, when the run had a chain switched off, when the delivery is on a
+chain this repository does not read — the Hyperliquid perpetuals in FOMO's catalog are out of its
+scope ([`03-tokens-and-liquidity.md`](03-tokens-and-liquidity.md)) — or when it is a withdrawal:
+USDC paid by Relay's solver to a plain address on an EVM chain, with the order id in the calldata
+and no token bought. It is counted and named rather than dropped; every chain above it is a floor
+and this row a ceiling.
 
 A sell is missing rather than unknown when the run was not listening to the chain it ran on: what
 marks a trade as FOMO's sits on that chain, so its payout on Solana has nothing to match against
@@ -142,12 +145,9 @@ listeners in this repository on 2026-09-09, and the shapes are the ones
 `maintenance/verify_registry.py` re-verified against both mainnets the same day. What Relay keeps
 on a sell was measured on 2026-09-15 over the sells recorded on Robinhood Chain and the payouts
 recorded on Solana. The EVM chain codes, and payments on EVM chains settled as cash on Solana, are
-from recordings of every chain on 2026-10-30.
-
-From Relay's API. That a payment can fund Hyperliquid: of 50 Solana payments recorded between
-2026-09-06 and 2026-10-30 whose delivery no listener saw, Relay's records placed one on Hyperliquid.
-The other 49 were delivered on chains these listeners now read, or refunded. That a payment can be
-a withdrawal: in a seven-minute recording of every chain on 2026-10-30, 13 Solana payments had no
-delivery in the run, and Relay's records showed all 13 delivered as USDC rather than a token — 9 on
-Hyperliquid, 4 to plain addresses on Ethereum and Base. Nothing in this document decodes from the
-API.
+from recordings of every chain on 2026-10-30. The uniqueness of the order id was measured again
+on 2026-11-01 over 19,681 rows recorded on every chain on 2026-10-30, across Solana payments and
+fills and EVM buys, sells and payments. The withdrawals were read on 2026-11-01: four Solana
+payments from a seven-minute recording of every chain on 2026-10-30 were settled by transactions on
+Ethereum and Base whose calldata carries the payment's order id and whose only USDC `Transfer` pays
+an address with no code, for slightly less than the payment.

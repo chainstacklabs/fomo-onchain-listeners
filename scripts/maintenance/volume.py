@@ -147,7 +147,7 @@ def count(rows):
     sold = order_ids(on_evm("SELL"))  # sells FOMO's wallets made on any EVM chain
     paid_out = order_ids(of_kind("SOL", "FILL"))  # sells Relay was seen settling on Solana
 
-    volume, missing, unlinked = {}, Counter(), 0
+    volume, missing, unlinked, unmatched = {}, Counter(), 0, 0
 
     def add(chain, line, value):
         row = volume.setdefault((chain, line), {"trades": 0, "usd": 0.0})
@@ -206,7 +206,7 @@ def count(rows):
         else:
             # Most cash deposited on an EVM chain is moving to Solana, so one whose other leg
             # was not matched is counted, never folded into volume at a guess.
-            missing["payments on an EVM chain whose other leg was not matched: cash moving, or a buy"] += 1
+            unmatched += 1
 
     # What Relay and the solver keep, read off the two ends of the same sells rather than
     # quoted from anywhere: what went into the depository against what came out on Solana.
@@ -219,7 +219,7 @@ def count(rows):
             into, out = into + before, out + after
     kept = (into - out) / into if into else None
 
-    return volume, missing, len(sold & paid_out), kept, moved, unlinked
+    return volume, missing, len(sold & paid_out), kept, moved, unlinked, unmatched
 
 
 def by_chain(volume, chain):
@@ -239,7 +239,7 @@ def main():
         return
     print(f"covered  {covered(rows) / 60:.1f} min of it was recorded — these totals are of that, not of the window")
 
-    volume, missing, settled, kept, moved, unlinked = count(rows)
+    volume, missing, settled, kept, moved, unlinked, unmatched = count(rows)
     total = sum(row["usd"] for row in volume.values())
     trades = sum(row["trades"] for row in volume.values())
 
@@ -266,7 +266,7 @@ def main():
 
     print("\nA trade that crosses chains is counted once, on the chain its swap ran on, so no")
     print("dollar above is counted twice. `chain unknown` is FOMO payments whose delivery was not")
-    print("matched — a buy outside the run or on a chain switched off, a Hyperliquid deposit, or a")
+    print("matched — a buy outside the run, on a chain switched off or on one no listener reads, or a")
     print("withdrawal — so that row is a ceiling and every chain above it a floor.")
 
     sells = sum(row["trades"] for (_, line), row in volume.items() if line.startswith("sells"))
@@ -274,8 +274,10 @@ def main():
     print(f"\n{settled} of {sells} sells were also seen being paid out on Solana{cut}.")
     if moved:
         print(f"{moved} payments on EVM chains were cash moving to Solana, paid out there as cash: not volume.")
+    if unmatched:
+        print(f"{unmatched} payments on EVM chains had no other leg in the run: cash moving, or a buy. Not volume.")
     if unlinked:
-        print(f"{unlinked} buys on EVM chains had an unreadable order id: their payments are in `chain unknown`.")
+        print(f"{unlinked} buys on EVM chains had an unreadable order id, so no payment could be matched to them.")
     if missing:
         print("\nNot priced, and so not in the totals above:")
         for label, n in missing.most_common():
