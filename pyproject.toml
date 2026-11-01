@@ -1,5 +1,5 @@
 [project]
-name = "robinhood-fomo"
+name = "fomo-onchain-listeners"
 version = "0.1.0"
 description = "Onchain listeners and a technical reference for the FOMO trading app on Solana and Robinhood Chain"
 readme = "README.md"
