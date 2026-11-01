@@ -115,8 +115,9 @@ Chain id 537713, RPC `https://rpc.chain.relay.link` and `wss://rpc.chain.relay.l
 | `mainnet.hudson.jito.wtf` | where Solana transactions are submitted |
 
 > [!NOTE]
-> Relay's API is versioned and on its way out: version 2 was throttled on 2026-09-01 and retires
-> on 2026-11-24, and version 3 requires a key. Relay's own UI for these transactions is at
+> Relay's API is versioned and on its way out: `/requests/v2` answers without a key until its
+> sunset on 2026-11-24, and its successor `/requests/v3` requires an `x-api-key` header
+> ([migration guide](https://docs.relay.link/references/api/api_guides/migrating-to-requests-v3)). Relay's own UI for these transactions is at
 > [relay.link/transactions](https://relay.link/transactions).
 
 ## Where this comes from
@@ -130,6 +131,7 @@ symbol and decimals above. The cash on each chain was read off the deposits made
 carrying FOMO's delegation on 2026-10-30, and the paymaster `0x8888888888…` was tied to fun.xyz and
 tria by the `referrer` on the Relay records of the deposits it sponsored.
 
-From FOMO's app. The offchain hosts — iOS v1.87.1, captured 2026-08-31. Relay Chain's contracts
+From FOMO's app. The offchain hosts — iOS v1.87.1, captured 2026-08-31. Relay's sunset date and
+successor are the headers `api.relay.link` returned on 2026-11-01. Relay Chain's contracts
 are named from Relay's documentation and read over `rpc.chain.relay.link`, which the verifier does
 not reach.
