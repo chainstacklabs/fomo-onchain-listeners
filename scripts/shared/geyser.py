@@ -1,7 +1,7 @@
 """How a Yellowstone gRPC subscription is built, and what gets it past the door.
 
-Two listeners open a Geyser stream: `03` on FOMO's co-signer, `06` on Relay's payout
-solver. The channel credentials and the subscription request are the same either way and
+Two listeners open a Geyser stream: `03` on FOMO's co-signer, `06` on the two payout
+solvers. The channel credentials and the subscription request are the same either way and
 differ only in the account watched, so both are values here, the way `block_subscription()`
 in shared/solana.py is a value for the two WebSocket listeners.
 
@@ -37,18 +37,20 @@ def credentials():
     return grpc.composite_channel_credentials(grpc.ssl_channel_credentials(), call)
 
 
-def transaction_subscription(account):
-    """The `Subscribe` request for every succeeding transaction that mentions `account`.
+def transaction_subscription(*accounts):
+    """The `Subscribe` request for every succeeding transaction that mentions any of `accounts`.
 
     `account_include` matches an account anywhere in the transaction, signer or not, which
-    is the same handle `mentionsAccountOrProgram` gives the WebSocket listeners. Failures
+    is the same handle `mentionsAccountOrProgram` gives the WebSocket listeners. It takes a
+    list, where `mentionsAccountOrProgram` takes one account, so one stream covers both
+    payout solvers. Failures
     are dropped by the server rather than read and discarded here.
 
     The filter is named for the shape of the thing, not for what is being watched: the
     name comes back on each update as an echo and no listener reads it.
     """
     request = geyser_pb2.SubscribeRequest()
-    request.transactions["watched"].account_include.append(account)
+    request.transactions["watched"].account_include.extend(accounts)
     request.transactions["watched"].failed = False
     request.commitment = COMMITMENT
     return request

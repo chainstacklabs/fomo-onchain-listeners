@@ -8,7 +8,7 @@ The last of those is the one that does not travel. The delegation points at the 
 `Simple7702Account`, deployed at the same address on every chain, and it names FOMO on Robinhood
 Chain only because FOMO is nearly its only tenant there.
 
-So this reports four things off the chain itself:
+So this reports five things off the chain itself:
 
 - which of the contracts the listeners key on have code here;
 - what the wallets already known from Robinhood Chain carry here. A Privy wallet has the same
@@ -18,7 +18,10 @@ So this reports four things off the chain itself:
   marker's precision on this chain;
 - how busy Relay is here: fills out of the executors, the recipients that carry the delegation,
   and deposits. A fill names its order id only in its calldata, so on a chain where Relay is
-  busy every fill a listener has to join costs a transaction fetch.
+  busy every fill a listener has to join costs a transaction fetch;
+- how busy the intent route is here, FOMO's other way to and from Solana: its sells, whose
+  senders should carry the delegation, and its fills, whose buyers the relayer's calldata
+  names. Each trade the listeners read through it costs a receipt fetch.
 
 Known wallets are every EVM wallet the listeners have recorded as FOMO's in `runs/`, on any
 chain. With no recordings the comparisons are skipped and the run says so.
@@ -49,10 +52,14 @@ from shared.evm import (
     EXECUTORS,
     FOMO_CODE,
     FOMO_IMPLEMENTATION,
+    INTENT,
+    INTENT_FILLED,
+    INTENT_SENT,
     NATIVE_DEPOSIT,
     ROUTERS,
     TRANSFER,
     USEROP,
+    intent_buyer,
 )
 
 # Every chain with a row in shared/evm.py, plus the ones that do not have one yet: probing
@@ -149,6 +156,7 @@ contracts = {
     "Relay depository": DEPOSITORY,
     **{f"Relay router {i + 1}": a for i, a in enumerate(ROUTERS)},
     **{f"Relay executor {i + 1}": a for i, a in enumerate(EXECUTORS)},
+    "intent route": INTENT,
 }
 for name, address in contracts.items():
     size = (len(rpc("eth_getCode", address, "latest")) - 2) // 2
@@ -236,3 +244,19 @@ delegated_depositors = sum(v == "fomo delegation" for v in depositor_codes.value
 print(f"  depositors carrying the delegation   {share(delegated_depositors, len(depositors))}")
 if known:
     print(f"  depositors known as FOMO wallets     {share(sum(d in known for d in depositors), len(depositors))}")
+
+trades = logs({"address": INTENT, "topics": [[INTENT_SENT, INTENT_FILLED]]}, low, head)
+sent = [log for log in trades if log["topics"][0] == INTENT_SENT]
+filled = sorted({log["transactionHash"] for log in trades if log["topics"][0] == INTENT_FILLED})
+print(f"  intent-route sends {len(sent)}, fills {len(filled)}")
+if sent:
+    sellers = codes(sorted({"0x" + log["topics"][2][-40:] for log in sent}))
+    delegated_sellers = sum(v == "fomo delegation" for v in sellers.values())
+    print(f"  senders carrying the delegation      {share(delegated_sellers, len(sellers))}")
+if filled:
+    calls = batch("eth_getTransactionByHash", [[h] for h in filled])
+    buyers = sorted({b.lower() for b in map(intent_buyer, calls) if b})
+    buyer_codes = codes(buyers)
+    print(f"  fill buyers {len(buyers)}, read from {len(filled)} relayer calls")
+    for kind, n in Counter(buyer_codes.values()).most_common(6):
+        print(f"    {n:5}  {kind}")

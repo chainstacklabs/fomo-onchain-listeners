@@ -17,6 +17,12 @@ the transaction: one handleOps bundle carries several users, so a hash join cred
 person's swap to another person's deposit. A buy also carries the Relay order id that paid
 for it, in the last word of the fill's calldata.
 
+FOMO's other route skips Relay, and a sweep reads its contract's events as well. A sell there
+is the wallet's own operation sending the native asset into the contract, and a buy is a
+relayer's call delivering the token. Neither event names the token, so a sweep also fetches
+the receipt of every such trade in one more round trip, and the fill's calldata for its
+buyer; both carry the intent id the Solana leg names in a memo.
+
 An HTTPS endpoint can be served by several backends whose heads differ by a few blocks, and
 one that has not reached the end of a range answers with silently fewer logs — Robinhood
 Chain's does. Logs are therefore asked for block by block, by the hash the head
@@ -52,22 +58,34 @@ from shared.evm import (
     DEPOSITORY,
     ENTRYPOINT,
     EXECUTOR_TOPICS,
+    INTENT,
+    INTENT_FILLED,
+    INTENT_SENT,
+    INTENT_TRADE_EVENTS,
     NATIVE_DEPOSIT,
     SYMBOL,
     TRANSFER,
+    UNREAD_ORDER,
     USEROP,
     VENUES,
     address_in_topic,
     address_in_word,
     app_name,
     decode_string,
+    delivered_to,
     erc20_deposit,
+    intent_buyer,
+    intent_ids,
+    intent_sent,
+    moved_from,
     native_deposit,
     order_from_calldata,
     padded_topic,
     quantity,
     span,
     sponsored,
+    swaps_in,
+    topic,
     trade_key,
     venues,
     where_of,
@@ -133,6 +151,36 @@ def sold_in_span(sent, user, tx, start, end, cash):
             continue
         return moved["address"], int(moved["data"][2:] or "0", 16)
     return None
+
+
+def read_intents(trade_logs, receipts, calls):
+    """One entry per trade through the intent route, read out of its receipt.
+
+    (log, wallet, operation, moved, venue, order): the seller or buyer, the seller's own
+    `UserOperationEvent` (None for a buy, which is a relayer's call rather than an
+    operation), the token that left or arrived as (token, raw) or None, the venues it ran
+    through — inside the seller's own operation, since a bundle carries several users —
+    and the intent id.
+    `receipts` maps a transaction to its logs and `calls` a fill's transaction to its
+    `eth_getTransactionByHash` result. A buyer that could not be read is None and is
+    counted by the caller.
+    """
+    read = []
+    for log in trade_logs:
+        tx = log["transactionHash"]
+        logs = receipts[tx]
+        order = intent_ids(logs).get(topic(log, 1), UNREAD_ORDER)
+        if topic(log) == INTENT_FILLED:
+            buyer = intent_buyer(calls.get(tx))
+            moved = delivered_to(logs, buyer) if buyer else None
+            read.append((log, buyer, None, moved, venues(swaps_in(logs)), order))
+            continue
+        user = intent_sent(log)[0]
+        operations = {int(op["logIndex"], 16): op for op in logs if topic(op) == USEROP}
+        start, end = span(operations, int(log["logIndex"], 16))
+        venue = venues(swaps_in(logs), start, end)
+        read.append((log, user, operations.get(end), moved_from(logs, user, start, end), venue, order))
+    return read
 
 
 async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
@@ -204,7 +252,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             return True
 
         async def sweep_logs(blocks):
-            """The five filters' logs for a range of blocks, asked for by block hash.
+            """The six filters' logs for a range of blocks, asked for by block hash.
 
             By hash rather than by range: a load-balanced endpoint whose answering backend
             has not reached the end of a range answers with silently fewer logs, while one
@@ -216,6 +264,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                 {"topics": [TRANSFER, EXECUTOR_TOPICS]},
                 {"topics": [list(VENUES)]},
                 {"address": DEPOSITORY, "topics": [NATIVE_DEPOSIT]},
+                {"address": INTENT},
             )
             calls = [("eth_getLogs", [{"blockHash": hashes[n], **f}]) for n in blocks for f in filters]
             replies = await batched(calls)
@@ -224,7 +273,23 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             # One filter's logs are every len(filters)'th reply, in the order asked for.
             return [[log for reply in replies[k :: len(filters)] for log in result(reply)] for k in range(len(filters))]
 
-        async def resolve_wallets(payments, fill_logs, at):
+        async def resolve_intents(trade_logs):
+            """(receipt logs per transaction, fill calldata per transaction), or None to retry.
+
+            A receipt the backend has not reached yet comes back null, which means the
+            same blocks are asked for again rather than a trade reported without its token.
+            """
+            txs = sorted({log["transactionHash"] for log in trade_logs})
+            fills = sorted({log["transactionHash"] for log in trade_logs if topic(log) == INTENT_FILLED})
+            calls = [("eth_getTransactionReceipt", [tx]) for tx in txs]
+            calls += [("eth_getTransactionByHash", [tx]) for tx in fills]
+            replies = await batched(calls) if calls else []
+            if replies is None or any(result(r) is None for r in replies[: len(txs)]):
+                return None
+            receipts = {tx: result(r)["logs"] for tx, r in zip(txs, replies[: len(txs)], strict=True)}
+            return receipts, {tx: r.get("result") for tx, r in zip(fills, replies[len(txs) :], strict=True)}
+
+        async def resolve_wallets(payments, fill_logs, at, others=()):
             """(app per wallet, transfers out of every depositor), or None to retry.
 
             A deposit is a sell if a token also left the depositor inside the same user
@@ -234,7 +299,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             ride, since they are one call each on the same trip.
             """
             depositors = {address_in_word(log, 0) for log, _ in payments}
-            buyers = {address_in_topic(log, 2) for log in fill_logs}
+            buyers = {address_in_topic(log, 2) for log in fill_logs} | set(others)
             unseen = sorted(w for w in buyers | depositors if w not in codes)
             fill_txs = sorted({log["transactionHash"] for log in fill_logs} - set(orders))
             calls = [("eth_getCode", [w, at]) for w in unseen]
@@ -266,14 +331,14 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             sent = [log for reply in replies[txs_end:] for log in result(reply)]
             return app, sent
 
-        async def resolve_tokens(payments, fill_logs, sent, at):
+        async def resolve_tokens(payments, fill_logs, sent, at, others=()):
             """Cache the symbol and decimals of every token this sweep names. False to retry.
 
             A token that reverts on either is remembered as "?" and counted, never given a
             guessed scale: a wrong number that looks right is worse than a missing one.
             """
             addresses = {erc20_deposit(log)[0] for log, native in payments if not native}
-            addresses |= {log["address"] for log in fill_logs} | {log["address"] for log in sent}
+            addresses |= {log["address"] for log in fill_logs} | {log["address"] for log in sent} | set(others)
             tokens = sorted(a for a in addresses if checksum(a) not in meta)
             calls = [
                 (m, p)
@@ -386,6 +451,59 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                     )
                 )
 
+        def emit_intents(intents, app):
+            """A trade through the intent route: a buy delivered, or the native asset sent away.
+
+            The same rules as Relay's: a buyer carries FOMO's delegation or is a plain
+            address whose intent id the caller claims; a seller carries it and no paymaster
+            paid for the operation. A send with no token leaving first is a payment.
+            """
+            for log, wallet, operation, moved, venue, order in intents:
+                if wallet is None:
+                    counts["intent fills whose buyer could not be read"] += 1
+                    continue
+                if not wanted(wallet):
+                    continue
+                token = None
+                if moved:
+                    symbol, decimals = meta[checksum(moved[0])]
+                    token = quantity(moved[1], decimals, symbol)
+                if topic(log) == INTENT_FILLED:
+                    if not (mine(app[wallet]) or (app[wallet] == "eoa" and claimed and claimed(order))):
+                        # A plain address is a wallet new to this chain or another application's
+                        # user; either way not reported, so counted apart from a known other one.
+                        if app[wallet] == "eoa":
+                            counts["intent fills to a plain address no FOMO payment claimed"] += 1
+                        else:
+                            counts["intent fills to another application's wallet"] += 1
+                        continue
+                    if token is None:
+                        counts["intent fills whose token could not be read"] += 1
+                    counts["BUY"] += 1
+                    emit(
+                        Trade(
+                            kind="BUY",
+                            got=token or "?",
+                            who=wallet,
+                            app=app[wallet],
+                            note=venue,
+                            where=where_of(log),
+                            key=trade_key(log),
+                            order_id=order,
+                        )
+                    )
+                    continue
+                if not mine(app[wallet]) or operation is None or sponsored(operation):
+                    counts["intent sends that are not FOMO's"] += 1
+                    continue
+                paid = quantity(intent_sent(log)[1], 18, here.native)
+                if token is None:
+                    counts["PAY"] += 1
+                    emit(Trade("PAY", paid, UNNAMED, wallet, app[wallet], "", where_of(log), trade_key(log), order))
+                    continue
+                counts["SELL"] += 1
+                emit(Trade("SELL", token, paid, wallet, app[wallet], venue, where_of(log), trade_key(log), order))
+
         async def handle(start_block, end_block):
             """One sweep. False when a backend was behind and the same range must be retried."""
             blocks = list(range(start_block, end_block + 1))
@@ -395,8 +513,15 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             logs = await sweep_logs(blocks)
             if logs is None:
                 return False
-            op_logs, deposit_logs, fill_logs, swap_logs, native_logs = logs
+            op_logs, deposit_logs, fill_logs, swap_logs, native_logs, intent_logs = logs
             counts["user operations"] += len(op_logs)
+            # The id event opens every trade and is read back out of the receipt; what is
+            # neither a buy nor a sell is the route moving its own money.
+            trade_logs = [log for log in intent_logs if topic(log) in (INTENT_FILLED, INTENT_SENT)]
+            fetched = await resolve_intents(trade_logs)
+            if fetched is None:
+                return False
+            intents = read_intents(trade_logs, *fetched)
 
             # A payment in ether and a payment in a token are the same trade seen from the
             # paying side, so they go through one list; the flag says which shape to read
@@ -408,15 +533,22 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                 (log["transactionHash"], int(log["logIndex"], 16)): "0x" + log["topics"][2][-40:] for log in op_logs
             }
 
-            resolved = await resolve_wallets(payments, fill_logs, at)
+            wallets = {wallet for _, wallet, _, _, _, _ in intents if wallet}
+            resolved = await resolve_wallets(payments, fill_logs, at, wallets)
             if resolved is None:
                 return False
             app, sent = resolved
-            if not await resolve_tokens(payments, fill_logs, sent, at):
+            tokens = {moved[0] for _, _, _, moved, _, _ in intents if moved}
+            if not await resolve_tokens(payments, fill_logs, sent, at, tokens):
                 return False
 
             emit_deposits(payments, app, sent, ops, swaps, paid_for, sender_of)
             emit_fills(fill_logs, app, swaps)
+            emit_intents(intents, app)
+            # Counted once the sweep has succeeded, since a retried one sees them again.
+            counts["intent-route events that are not trades"] += sum(
+                1 for log in intent_logs if topic(log) not in INTENT_TRADE_EVENTS
+            )
             return True
 
         async with websockets.connect(websocket, open_timeout=OPEN_TIMEOUT, close_timeout=1) as socket:

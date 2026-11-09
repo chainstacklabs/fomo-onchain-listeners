@@ -87,6 +87,15 @@ CHAINS = {
         cash=("0x754704bc059f8c67012fed69bc8a327a5aafb603", "0xe7cd86e13ac4309349f30b3435a9d337750fc82d"),
         block_seconds=0.4,
     ),
+    "elysium": Chain(
+        code="ELY",
+        name="Elysium",
+        variable="ELYSIUM",
+        chain_id=99901,
+        native="HYPE",
+        cash=("0xb47c4c8f73f009cc0c0d3f92b388d13e293f0b65",),  # USDC
+        block_seconds=0.12,
+    ),
 }
 
 # --- who is who, the same on every chain above -------------------------------
@@ -99,6 +108,22 @@ EXECUTORS = ("0x0729e2a4716d9f7dd17858d5d504426d228697f7", "0xb92fe925dc43a0ecde
 EXECUTOR_TOPICS = ["0x" + "0" * 24 + executor[2:] for executor in EXECUTORS]
 ROUTERS = ("0x5567954cd026cebfe486062cb75848e0f1c12e58", "0xccc88a9d1b4ed6b0eaba998850414b24f1c315be")
 BURN = "0x0000000000000000000000000000000000000000"
+
+# FOMO's second route across chains, which skips Relay. A sell sends the native asset from
+# the wallet's own operation into this contract, which names the Solana recipient; a buy is one
+# of two relayers calling it to swap its own native inventory into the token and deliver it. Every
+# trade through it opens with an id event, whose data is the same intent id the Solana leg
+# carries in its memo, so the two legs join on it the way a Relay order id joins them.
+INTENT = "0xa834e70303322d86e5dae95ee47e9c6a073d9812"
+INTENT_ID = "0x74647a56026fd5e5a5fdb01d686969d17f40667aeedffef44cdeb894156e35a4"
+INTENT_SENT = "0xfe501452dda9020e758013c7a853ee26084957e0f6829b6f9b900741371c750b"
+INTENT_FILLED = "0x7af24e5c613ac48d048691774e9628abdc41c7d6d0b61f915af585016c539ca8"
+INTENT_PAID = "0x4246c15f4969fe0fc080f44aab1ae786773aaf3e47d9571b33b28d19d0f40f9e"  # beside most fills
+# Every event a trade through the route emits; anything else is the route moving its own money.
+INTENT_TRADE_EVENTS = (INTENT_ID, INTENT_SENT, INTENT_FILLED, INTENT_PAID)
+# The relayers' two calls that fill a buy, with and without a payment beside it; in both,
+# word 2 is the buyer and word 4 the router.
+INTENT_FILL_CALLS = ("0xeb46f6eb", "0x4aae2e37")
 
 # A FOMO wallet is an ordinary address carrying one EIP-7702 delegation, and the
 # implementation it points at names the application behind it. FOMO_CODE is what
@@ -288,3 +313,68 @@ def venues(swaps, start=None, end=None):
     """
     inside = swaps if start is None else [(i, v) for i, v in swaps if start < i < end]
     return "+".join(dict.fromkeys(v for _, v in inside))
+
+
+# --- the intent route --------------------------------------------------------
+# A trade through the intent contract is read out of its whole receipt, because what makes
+# it a trade — the token leaving the seller, the token reaching the buyer — is a Transfer
+# that names neither the contract nor anything a filter could know in advance.
+
+
+def intent_ids(logs):
+    """{topic 1: intent id} out of a transaction's id events.
+
+    Topic 1 is a 32-byte key the contract's other events repeat; it is not a hash of the
+    id, so the id is only ever read from the event that states it.
+    """
+    return {
+        topic(log, 1): bytes.fromhex(log["data"][2:66]).rstrip(b"\x00").decode(errors="replace")
+        for log in logs
+        if log["address"].lower() == INTENT and topic(log) == INTENT_ID
+    }
+
+
+def intent_sent(log):
+    """(sender, raw native amount) out of a sell's event: the wallet and what it sent."""
+    return address_in_topic(log, 2), int(word(log["data"].removeprefix("0x"), 3), 16)
+
+
+def intent_buyer(info):
+    """The wallet an intent fill delivers to, or None for any other transaction.
+
+    The fill's events name the router the relayer swapped through, never the buyer; the
+    buyer is word 2 of the relayer's call, in either of its two shapes. `info` is an
+    `eth_getTransactionByHash` result.
+    """
+    if not info or (info.get("to") or "").lower() != INTENT or not info["input"].startswith(INTENT_FILL_CALLS):
+        return None
+    return Web3.to_checksum_address("0x" + word(info["input"][10:], 2)[24:])
+
+
+def moved_from(logs, user, start, end):
+    """(token, raw amount) of the first token `user` sent inside (start, end), or None.
+
+    That is the token a sell gave up: the operation hands it to a router, and everything
+    after is the router's. Scoped to the user's own operation, as a deposit is.
+    """
+    for log in logs:
+        if topic(log) != TRANSFER or len(log["topics"]) < 3:
+            continue
+        if start < int(log["logIndex"], 16) < end and address_in_topic(log, 1).lower() == user.lower():
+            return log["address"], int(log["data"][2:] or "0", 16)
+    return None
+
+
+def delivered_to(logs, buyer):
+    """(token, raw amount) of the last token that reached `buyer`, or None."""
+    landed = [
+        (log["address"], int(log["data"][2:] or "0", 16))
+        for log in logs
+        if topic(log) == TRANSFER and len(log["topics"]) > 2 and address_in_topic(log, 2).lower() == buyer.lower()
+    ]
+    return landed[-1] if landed else None
+
+
+def swaps_in(logs):
+    """(log index, venue) for every swap a receipt holds, the shape `venues` reads."""
+    return [(int(log["logIndex"], 16), VENUES[topic(log)]) for log in logs if topic(log) in VENUES]

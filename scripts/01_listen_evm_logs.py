@@ -1,6 +1,6 @@
 """Listen to FOMO trades on one EVM chain by subscribing to logs directly.
 
-Six `eth_subscribe` filters run on one socket and every event is pushed the moment its
+Seven `eth_subscribe` filters run on one socket and every event is pushed the moment its
 block is published; nothing is polled and no block is fetched. The filters are separate
 subscriptions the node does not order against each other, so a deposit can arrive before
 the transfer that makes it a sell. Fills and deposits are therefore held until the first
@@ -19,6 +19,12 @@ money into the depository with no token leaving, in either the ERC-20 or the nat
 A buy also carries the Relay order id that paid for it: the fill is a call to Relay's
 router whose calldata ends with the 32-byte id from the deposit on the other chain, so
 the whole cross-chain join comes off the chain itself.
+
+FOMO's other route skips Relay, and the seventh filter is its contract's events. A sell there
+is the wallet's own operation sending the native asset into the contract, and a buy is a
+relayer's call delivering the token. Neither event names the token, so each is decoded out
+of its transaction's receipt — one lookup per trade — and both carry the intent id, which
+the Solana leg names in a memo. They are reported as BUY, SELL and PAY like Relay's.
 
 Buys and sells are separated by what moved inside the depositor's own log-index span,
 not by the transaction: one handleOps bundle carries several users, and one user can
@@ -60,6 +66,10 @@ from shared.evm import (
     DEPOSITORY,
     ENTRYPOINT,
     EXECUTOR_TOPICS,
+    INTENT,
+    INTENT_FILLED,
+    INTENT_SENT,
+    INTENT_TRADE_EVENTS,
     NATIVE_DEPOSIT,
     SYMBOL,
     TRANSFER,
@@ -70,12 +80,19 @@ from shared.evm import (
     address_in_word,
     app_name,
     decode_string,
+    delivered_to,
     erc20_deposit,
+    intent_buyer,
+    intent_ids,
+    intent_sent,
+    moved_from,
     native_deposit,
     order_from_calldata,
     quantity,
     span,
     sponsored,
+    swaps_in,
+    topic,
     trade_key,
     venues,
     where_of,
@@ -92,6 +109,7 @@ MAX_FRAME_BYTES = 32 * 1024 * 1024
 OPEN_TIMEOUT = 30
 OPERATION_WAITS = 6  # how many times a deposit waits for its own operation to arrive
 OPERATION_WAIT = 0.5  # seconds per wait
+RECEIPTS_KEPT = 2000  # intent-route receipts remembered before the cache is dropped; each is a whole receipt
 
 
 # --------------------------------------------------------------------- asking the node
@@ -166,6 +184,41 @@ async def app_of(ask, cache, counts, address, block):
     return cache[key]
 
 
+async def receipt_of(ask, cache, tx):
+    """A transaction's logs, read once, or None when the node will not say.
+
+    The log that prompted this was pushed by one backend, and the HTTP endpoint may be served
+    by another that has not reached its block yet. That one answers null rather than
+    erroring, so null is waited out like a deposit's operation is, never taken as an answer.
+    """
+    if tx not in cache:
+        for _ in range(OPERATION_WAITS):
+            try:
+                receipt = await ask("eth_getTransactionReceipt", [tx])
+            except Exception:
+                return None
+            if receipt is not None:
+                cache[tx] = receipt["logs"]
+                break
+            await asyncio.sleep(OPERATION_WAIT)
+        else:
+            return None
+    return cache[tx]
+
+
+async def transaction_of(ask, cache, tx):
+    """`eth_getTransactionByHash`, read once, or None when the node will not say."""
+    if tx not in cache:
+        try:
+            info = await ask("eth_getTransactionByHash", [tx])
+        except Exception:
+            return None
+        if info is None:
+            return None
+        cache[tx] = info
+    return cache[tx]
+
+
 async def order_of(ask, cache, tx):
     """The Relay order id the fill's router call carries, which is the cross-chain join."""
     if tx not in cache:
@@ -221,7 +274,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
     here = CHAINS[chain]
     websocket, url = env.require(f"{here.variable}_MAINNET_WSS", f"{here.variable}_MAINNET_HTTPS")
 
-    meta, codes, orders = {}, {}, {}
+    meta, codes, orders, receipts, transactions = {}, {}, {}, {}, {}
     # Per transaction, and each entry carries its log index: a deposit is scoped to
     # the operation it sits in, never to the whole bundle.
     sold_in_tx, venue_in_tx, ops_in_tx = defaultdict(list), defaultdict(list), defaultdict(list)
@@ -356,6 +409,81 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                 )
             )
 
+        async def show_intent(log, tx):
+            """A trade through the intent route, read out of its receipt."""
+            logs = await receipt_of(ask, receipts, tx)
+            if logs is None:
+                counts["intent trades whose receipt could not be read"] += 1
+                return
+            order = intent_ids(logs).get(topic(log, 1), UNREAD_ORDER)
+            if topic(log) == INTENT_FILLED:
+                await show_intent_fill(log, tx, logs, order)
+            else:
+                await show_intent_sent(log, logs, order)
+
+        async def show_intent_fill(log, tx, logs, order):
+            """A relayer delivering a token bought on Solana: a buy.
+
+            The same rule as a Relay fill: the wallet carries FOMO's delegation, or it is a
+            plain address whose intent id the caller claims.
+            """
+            buyer = intent_buyer(await transaction_of(ask, transactions, tx))
+            if buyer is None:
+                counts["intent fills whose buyer could not be read"] += 1
+                return
+            if not wanted(watched, buyer):
+                return
+            app = await owner_app(buyer, log["blockNumber"])
+            if not (is_fomo(app) or (app == "eoa" and claimed and claimed(order))):
+                # A plain address is a wallet new to this chain or another application's user;
+                # either way not reported, so counted apart from a known other application.
+                plain = "a plain address no FOMO payment claimed" if app == "eoa" else "another application's wallet"
+                counts[f"intent fills to {plain}"] += 1
+                return
+            got = "?"
+            landed = delivered_to(logs, buyer)
+            if landed:
+                symbol, decimals = await symbol_of(landed[0])
+                got = quantity(landed[1], decimals, symbol)
+            else:
+                counts["intent fills whose token could not be read"] += 1
+            counts["BUY"] += 1
+            emit(
+                Trade(
+                    kind="BUY",
+                    got=got,
+                    who=buyer,
+                    app=app,
+                    note=venues(swaps_in(logs)),
+                    where=where_of(log),
+                    key=trade_key(log),
+                    order_id=order,
+                )
+            )
+
+        async def show_intent_sent(log, logs, order):
+            """The native asset leaving for Solana: a sell when a token left first, a payment when not."""
+            user, raw = intent_sent(log)
+            if not wanted(watched, user):
+                return
+            app = await owner_app(user, log["blockNumber"])
+            operations = {int(op["logIndex"], 16): op for op in logs if topic(op) == USEROP}
+            start, end = span(operations, int(log["logIndex"], 16))
+            if not is_fomo(app) or end not in operations or sponsored(operations[end]):
+                counts["intent sends that are not FOMO's"] += 1
+                return
+            paid = quantity(raw, 18, here.native)
+            went_out = moved_from(logs, user, start, end)
+            if went_out is None:
+                counts["PAY"] += 1
+                emit(Trade("PAY", paid, UNNAMED, user, app, "", where_of(log), trade_key(log), order))
+                return
+            symbol, decimals = await symbol_of(went_out[0])
+            counts["SELL"] += 1
+            venue = venues(swaps_in(logs), start, end)
+            sold = quantity(went_out[1], decimals, symbol)
+            emit(Trade("SELL", sold, paid, user, app, venue, where_of(log), trade_key(log), order))
+
         filters = [
             ("userop", {"address": ENTRYPOINT, "topics": [USEROP]}),
             ("deposit", {"address": DEPOSITORY, "topics": [DEPOSIT]}),
@@ -363,6 +491,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             ("fill", {"topics": [TRANSFER, EXECUTOR_TOPICS]}),
             ("sold", {"topics": [TRANSFER, None, EXECUTOR_TOPICS]}),
             ("swap", {"topics": [list(VENUES)]}),
+            ("intent", {"address": INTENT}),
         ]
 
         async with websockets.connect(
@@ -475,6 +604,14 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                         held.append((int(log["blockNumber"], 16), show_deposit, log, tx, time.time()))
                     elif kind == "native":
                         held.append((int(log["blockNumber"], 16), show_native_deposit, log, tx, time.time()))
+                    elif kind == "intent":
+                        # The id event opens every trade and the payment event sits beside a fill;
+                        # both are read back out of the receipt. Anything else is the route moving
+                        # its own money.
+                        if topic(log) in (INTENT_FILLED, INTENT_SENT):
+                            later(show_intent, log, tx)
+                        elif topic(log) not in INTENT_TRADE_EVENTS:
+                            counts["intent-route events that are not trades"] += 1
                     release()
 
                     if len(sold_in_tx) > 20000:
@@ -484,6 +621,12 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                         paid_for.clear()
                         sender_of.clear()
                         orders.clear()
+                    # Bounded on their own: an intent-route trade adds a receipt here without
+                    # adding to the Relay caches above, and on a chain where nearly every trade
+                    # takes that route those would never reach their bound.
+                    if len(receipts) > RECEIPTS_KEPT:
+                        receipts.clear()
+                        transactions.clear()
 
                 release(everything=True)
             finally:

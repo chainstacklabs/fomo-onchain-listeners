@@ -1,14 +1,16 @@
-"""Listen to Relay's payouts on Solana over a Yellowstone gRPC (Geyser) subscription.
+"""Listen to the solvers' payouts on Solana over a Yellowstone gRPC (Geyser) subscription.
 
-The far half of a sell made on another chain. A sell executed on Robinhood Chain hands its
-proceeds to Relay there, and Relay pays the seller in USDC here, signed by a solver rather
-than by FOMO's co-signer. `account_include` matches an account anywhere in a transaction,
-signer or not, so the solver is as reachable over gRPC as it is over `blockSubscribe`, and
-this reads the same flow as 05_listen_relay_payouts_blocks.py one commitment earlier.
+The far half of a sell made on another chain. A sell executed on an EVM chain hands its
+proceeds to one of FOMO's two routes there, Relay or the intent route, and that route's
+solver pays the seller in USDC here, signed by the solver rather than by FOMO's co-signer.
+`account_include` matches an account anywhere in a transaction, signer or not, and takes a
+list, so one stream reaches both solvers, and this reads the same flow as
+05_listen_relay_payouts_blocks.py one commitment earlier.
 
-Payouts call no Relay program and emit no event. The order id travels in an spl-memo, and
-about one in ten of the solver's payouts is native SOL rather than a token, so lamport
-gains are read whenever no token moved. Both rules are 05's; what differs here is the wire.
+Payouts call no program of their route and emit no event. The id travels in a memo — Relay's
+32-byte order id, or the intent id — and about one in ten of Relay's payouts is native SOL
+rather than a token, so lamport gains are read whenever no token moved. Both rules are 05's;
+what differs here is the wire.
 
 Three things are read differently from a Geyser update than from a parsed block:
 
@@ -22,24 +24,24 @@ Three things are read differently from a Geyser update than from a parsed block:
 The tally counts slots rather than blocks: this stream delivers one transaction at a time,
 so the block 05 counts has no equivalent here.
 
-This is not a FOMO feed and does not pretend to be one. The solver serves every application
+This is not a FOMO feed and does not pretend to be one. Relay's solver serves every application
 and every origin chain Relay settles from, and nothing in a payout says which application
 it belongs to. Attribution needs the deposit behind the order id, which lives on the other
 chain, so 00_listen_fomo.py is where a payout becomes a named FOMO sell.
 
-Emits FILL, defined in shared/feed.py: money leaving Relay, with the recipient and the
-order id that says which sell it settles. `Trade.app` is left empty because this chain
+Emits FILL, defined in shared/feed.py: money leaving a solver, with the recipient and the
+id that says which sell it settles. `Trade.app` is left empty because this chain
 cannot answer it.
 
 Solver addresses rotate. When this one is replaced the stream goes quiet rather than wrong,
 so a run that reports no payouts at all is a reason to re-check the address rather than to
-conclude that nobody sold; it is in maintenance/registry.json under `solana.settlement`,
-and maintenance/verify_registry.py checks it.
+conclude that nobody sold; both are in maintenance/registry.json under `solana.settlement` and
+`solana.intent`, and maintenance/verify_registry.py checks them.
 
 Needs a Geyser endpoint, a paid add-on at most providers. For a standard WebSocket instead,
 see 05_listen_relay_payouts_blocks.py; both read the same solver by the same rules.
 
-Reference: docs/04-listening.md (Solana, Joining the two legs), docs/05-relay.md (Solvers).
+Reference: docs/04-listening.md (Solana, Joining the two legs), docs/05-crossing.md (Solvers, The intent route).
 
     uv run scripts/06_listen_relay_payouts_grpc.py [seconds] [wallet ...]     default 120
 """
@@ -52,7 +54,7 @@ import grpc
 from geyser.generated import geyser_pb2_grpc
 from shared import cli, env, geyser
 from shared.feed import Trade
-from shared.solana import MEMO_PROGRAMS, SETTLEMENT_SOLVER, mint_name
+from shared.solana import MEMO_PROGRAMS, SOLVERS, mint_name, payout_id
 
 ENDPOINT = env.optional("GEYSER_ENDPOINT")
 
@@ -72,20 +74,18 @@ def keys_of(message, meta):
 
 
 def order_of(message, keys):
-    """The Relay order id a payout carries, out of the memo that holds one.
+    """The id a payout carries, out of the memo that holds one: Relay's or an intent's.
 
     The memo is raw instruction data here rather than a parsed string, so it is decoded
-    before it can be recognised. The other memo a payout carries is a nonce beginning
-    with the unix time, so shape is the test, as it is in `05`.
+    before it can be recognised; `payout_id` then tests its shape, as it does in `05`.
     """
     for instruction in message.instructions:
         if instruction.program_id_index >= len(keys):
             continue
         if keys[instruction.program_id_index] not in MEMO_PROGRAMS:
             continue
-        note = bytes(instruction.data).decode("utf-8", "ignore")
-        if note.startswith("0x") and len(note) == 66:
-            return note.lower()
+        if order := payout_id(bytes(instruction.data).decode("utf-8", "ignore")):
+            return order
     return ""
 
 
@@ -136,7 +136,7 @@ async def listen(deadline, watched, emit, counts):
     seen = set()  # the slots counted, so a slot delivering two payouts counts once
     async with grpc.aio.secure_channel(ENDPOINT, geyser.credentials()) as channel:
         stub = geyser_pb2_grpc.GeyserStub(channel)
-        request = geyser.transaction_subscription(SETTLEMENT_SOLVER)
+        request = geyser.transaction_subscription(*SOLVERS)
 
         async def requests():
             yield request
@@ -162,19 +162,21 @@ async def listen(deadline, watched, emit, counts):
             info = update.transaction.transaction
             message, meta = info.transaction.message, info.meta
             keys = keys_of(message, meta)
-            if SETTLEMENT_SOLVER not in keys[: message.header.num_required_signatures]:
-                # Mentions the solver without being signed by it: somebody paying it,
-                # rather than it paying out.
+            signers = keys[: message.header.num_required_signatures]
+            solver = next((s for s in SOLVERS if s in signers), None)
+            if not solver:
+                # Mentions a solver without being signed by it: somebody paying it, rather
+                # than it paying out.
                 continue
             if update.transaction.slot not in seen:
                 seen.add(update.transaction.slot)
                 counts["slots carrying a solver transaction"] += 1
             order = order_of(message, keys)
             if not order:
-                # Relay's own plumbing rather than somebody's payout.
+                # The solver's own plumbing rather than somebody's payout.
                 counts["solver transactions that are not payouts"] += 1
                 continue
-            recipient, amount, mint = credited(meta, keys, SETTLEMENT_SOLVER)
+            recipient, amount, mint = credited(meta, keys, solver)
             if not recipient:
                 # An order id but nothing credited: counted, never dropped quietly.
                 counts["payouts whose recipient could not be read"] += 1
@@ -196,5 +198,5 @@ if __name__ == "__main__":
     cli.run(
         "payouts-grpc",
         listen,
-        "every application Relay settles on Solana, not FOMO's alone",
+        "every application both solvers settle on Solana, not FOMO's alone",
     )

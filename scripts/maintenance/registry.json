@@ -111,6 +111,41 @@
     "fomoFundingEoa": {
       "address": "0x083b5091662DAbd34416b2658598cbc90Bf0E6Dc",
       "what": "EOA. Credits user wallets on withdrawal/refund."
+    },
+    "intentRoute": {
+      "address": "0xa834e70303322d86e5dae95ee47e9c6a073d9812",
+      "what": "FOMO's second route to and from Solana, which skips Relay. An ERC-1967 proxy at one address on every chain it is deployed on, with a different implementation on each. A sell sends the native asset into it from the wallet's own user operation; a buy is the relayer calling it to swap its own native inventory into the token and deliver it. Every trade opens with an IntentId event whose data is the intent id the Solana leg carries in a memo.",
+      "implementations": {
+        "rh": "0x195e54c2b00dcbbadf74e0ff770a0a034ccf8ea2",
+        "bsc": "0xef9263f6913ccdff8825f528d4551e122d1f556d",
+        "base": "0xde17930b3f250f519ff00b1a9ae8191c970a1f74",
+        "elysium": "0x02d9f13210203b02ba627fbcf6e034a2e0ad025b"
+      },
+      "codeSince": {
+        "bsc": "2026-06-04",
+        "rh": "2026-07-08",
+        "elysium": "2026-11-06"
+      },
+      "absentOn": [
+        "eth",
+        "monad"
+      ],
+      "fillCall": "0xeb46f6eb, or 0x4aae2e37 for a fill with no payment beside it - the relayers' calls that fill a buy; in both, ABI word 2 of the arguments is the buyer and word 4 the router."
+    },
+    "intentRelayer1": {
+      "address": "0x9a3811b1afeadf2800b499eb234a7ab8f366dfbf",
+      "what": "EOA, one of the two relayers that send intent-route fills. An EOA on every chain."
+    },
+    "intentRelayer2": {
+      "address": "0xe950337f36e45c316c53c69a5f285487b54f0bad",
+      "what": "EOA, the other relayer; the two share the fills about evenly. An EOA on every chain."
+    },
+    "intentRouters": {
+      "what": "The router the intent route swaps through, named in word 4 of a fill and called by a sell's operation. It differs per chain.",
+      "rh": "0x0005ea38eb0a69d1253508ebdbdb9ea8cb26b5ef",
+      "base": "0x0005ea38eb0a69d1253508ebdbdb9ea8cb26b5ef",
+      "bsc": "0x0005ea70fa6dbd2efd17697d2351301adb6318b2",
+      "elysium": "0xc39f7e7ea5f6b65a384e76cc6225f9b5a872fbc5"
     }
   },
   "aggregationLayer": {
@@ -330,7 +365,61 @@
         "amount"
       ],
       "use": "ERC-6909 ledger movement on Relay's own chain. sender == 0 is a deposit attested from any origin chain; receiver == 0 is a withdrawal burned; neither is a fill settled to a solver. maintenance/relay_share.py reads this as Relay's whole-protocol denominator."
-    }
+    },
+    "0x74647a56026fd5e5a5fdb01d686969d17f40667aeedffef44cdeb894156e35a4": {
+      "at": "intentRoute",
+      "label": "IntentId",
+      "indexed": [
+        "key"
+      ],
+      "data": [
+        "intent id, ASCII in one bytes32: 7 hex - 7 hex - 3 hex"
+      ],
+      "use": "Opens every intent-route trade. The intent id is the Solana memo's; topic 1 is a key the trade's other events repeat, not a hash of the id."
+    },
+    "0xfe501452dda9020e758013c7a853ee26084957e0f6829b6f9b900741371c750b": {
+      "at": "intentRoute",
+      "label": "IntentSent",
+      "indexed": [
+        "key",
+        "sender"
+      ],
+      "data": [
+        "destination, ASCII in one bytes32: solana:solana",
+        "Solana recipient, 32 bytes",
+        "token in (zero: native)",
+        "amount in"
+      ],
+      "use": "A sell or payment leaving for Solana. sender is topic[2]; the token sold is the Transfer out of the sender inside its own user operation."
+    },
+    "0x7af24e5c613ac48d048691774e9628abdc41c7d6d0b61f915af585016c539ca8": {
+      "at": "intentRoute",
+      "label": "IntentFilled",
+      "indexed": [
+        "key"
+      ],
+      "data": [
+        "router",
+        "token in (zero: native)",
+        "amount",
+        "amount"
+      ],
+      "use": "A buy paid on Solana, delivered here. The buyer is not in the event: it is word 2 of the relayer's 0xeb46f6eb call, and the token is the last Transfer to it in the receipt."
+    },
+    "0x4246c15f4969fe0fc080f44aab1ae786773aaf3e47d9571b33b28d19d0f40f9e": {
+      "at": "intentRoute",
+      "label": "IntentPaid",
+      "indexed": [
+        "key",
+        "recipient"
+      ],
+      "data": [
+        "token (zero: native)",
+        "amount"
+      ],
+      "use": "Beside every fill: native paid from the contract to 0x9fc4e320a181e88644a302d11f1f158ef0699e37, a 171-byte contract on every chain but Elysium, where it has no code. Not a trade."
+    },
+    "_intentLabels": "The intent route's contracts are unverified, so its events are recorded by topic with a label naming their role; the labels are not ABI names and nothing hashes them."
   },
   "listeningRecipes": {
     "allFomoActions": {
@@ -745,7 +834,27 @@
       "note": "Relay's solver addresses rotate the way this chain's bundlers do. Re-check before relying on the address; the memo and the token-account rule hold regardless of who signs.",
       "verifiedAt": "2026-09-08"
     },
-    "verifiedAt": "2026-09-06"
+    "verifiedAt": "2026-09-06",
+    "intent": {
+      "solver": "oMcssxWxgooErb8bsRA4QN34VHhvfeEbdDjrwF6WH45",
+      "memoProgram": "Memo4c2pN8afCj432Lb7RMVKi9PbQnnW7ewFFaV3oAH",
+      "what": "The intent route's solver. A buy is a co-signed USDC transfer from the user to it with memo {\"intentId\":\"<id>\"}; a sell's proceeds come from it as USDC with the bare id in a memo. Both memos go through memoProgram, not the SPL memo programs.",
+      "verifiedAt": "2026-11-09"
+    },
+    "outflows": {
+      "what": "USDC leaving a FOMO wallet by neither route: listeners report these as OUT, not as trades.",
+      "withdrawalCut": {
+        "address": "R4rNJHaffSUotNmqSKNEfDcJE8A7zJUkaoM5Jkd7cYX",
+        "what": "Paid exactly 0.20 USDC beside a co-signed withdrawal that creates the recipient's USDC account (30 of 30 on 2026-11-09). Also receives transfers FOMO does not co-sign."
+      },
+      "collector": {
+        "address": "4YdxBVxy5k5kWuBqhFFjR32PBNs1whkL6PQwitR2Va3Y",
+        "what": "Receives co-signed USDC payments with a 12-byte memo (24 hex) whose first 4 bytes are a unix time 2-20 s before the block; sweeps round sums to sweepTarget, fee paid by sweepFeePayer.",
+        "sweepTarget": "41zCUJsKk6cMB94DDtm99qWmyMZfp4GkAhhuz4xTwePu",
+        "sweepFeePayer": "7N3vzw6W4F9PZ7bePfXnhvwH6PAEE7XCpge899HLpQUY"
+      },
+      "verifiedAt": "2026-11-09"
+    }
   },
   "evmChains": {
     "_what": "Every EVM chain FOMO trades on, as shared/evm.py's CHAINS table carries it. Relay's depository, routers and executors, EntryPoint v0.8 and Simple7702Account sit at the addresses in accountLayer and intentLayer on every one of them. What differs is listed here. Cash is read off FOMO's own deposits on each chain.",
@@ -759,7 +868,8 @@
           "decimals": 6
         }
       ],
-      "verifiedAt": "2026-10-30"
+      "verifiedAt": "2026-10-30",
+      "intentRoute": true
     },
     "bsc": {
       "chainId": 56,
@@ -776,7 +886,8 @@
           "decimals": 18
         }
       ],
-      "verifiedAt": "2026-10-30"
+      "verifiedAt": "2026-10-30",
+      "intentRoute": true
     },
     "base": {
       "chainId": 8453,
@@ -788,7 +899,8 @@
           "decimals": 6
         }
       ],
-      "verifiedAt": "2026-10-30"
+      "verifiedAt": "2026-10-30",
+      "intentRoute": true
     },
     "eth": {
       "chainId": 1,
@@ -823,6 +935,19 @@
         }
       ],
       "verifiedAt": "2026-10-30"
+    },
+    "elysium": {
+      "chainId": 99901,
+      "native": "HYPE",
+      "cash": [
+        {
+          "address": "0xb47c4c8f73f009cc0c0d3f92b388d13e293f0b65",
+          "symbol": "USDC",
+          "decimals": 6
+        }
+      ],
+      "intentRoute": true,
+      "verifiedAt": "2026-11-09"
     }
   }
 }

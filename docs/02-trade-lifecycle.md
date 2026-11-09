@@ -12,30 +12,34 @@ should come from.
 
 | Shape | What happens onchain |
 |---|---|
-| **Cross-chain buy** | A deposit into [Relay](https://docs.relay.link/references/protocol/overview) on the chain holding the cash, then a solver swaps and delivers on the chain holding the token |
-| **Cross-chain sell** | The user's own operation swaps the token on its chain and hands the proceeds to Relay; the payout follows on the cash chain |
-| **Same-chain trade** | One ordinary swap on that chain's venues. Relay plays no part |
+| **Cross-chain buy** | A payment into one of two routes on the chain holding the cash — a deposit into [Relay](https://docs.relay.link/references/protocol/overview), or USDC to the intent route's solver — then a solver or a relayer swaps and delivers on the chain holding the token |
+| **Cross-chain sell** | The user's own operation swaps the token on its chain and hands the proceeds to a route; the payout follows on the cash chain |
+| **Same-chain trade** | One ordinary swap on that chain's venues. Neither route plays a part |
 | **Withdrawal** | A deposit on one chain, then a solver pays an external address on another |
 | **Moving cash to Solana** | A deposit of a stablecoin on an EVM chain, then a solver pays the same cash out on Solana, where the balance lives |
 
 A cross-chain trade is two transactions on two chains joined by an identifier. Money leaves on one
-side; something arrives on the other. No transaction on either chain holds both halves.
+side; something arrives on the other. No transaction on either chain holds both halves. FOMO
+crosses by two routes, Relay and the intent route, and both carry its trades at the same time;
+[`05-crossing.md`](05-crossing.md) sets them side by side.
 
 ## Before anything touches a chain
 
 The app asks FOMO's server to build the trade, sending a token, an amount and nothing else. The
 response is the entire plan: the price, the route, the fees, the slippage tolerance, the minimum
-trade size, the order id that ties the legs together, and a ready-to-sign transaction. Every
+trade size, the id that ties the legs together, and a ready-to-sign transaction. Every
 parameter is the server's choice.
 
 ## Buying
 
 The user signs one transaction on the chain their cash is on. It is a deposit into Relay carrying an
-amount and a 32-byte order id — **the token being bought appears nowhere in it**. On Solana that
-transaction is co-signed by FOMO, which also pays the network fee.
+amount and a 32-byte order id, or a USDC transfer to the intent route's solver carrying an intent
+id in a memo — **the token being bought appears nowhere in either**. On Solana that transaction is
+co-signed by FOMO, which also pays the network fee.
 
-A solver then delivers, in a transaction of its own, on the chain where the token lives. It spends
-its own capital, pays its own gas, and the user signs nothing. This is the first moment the token is
+A solver, or the intent route's relayer, then delivers, in a transaction of its own, on the chain
+where the token lives. It spends inventory that is not the user's, pays its own gas, and the user
+signs nothing. This is the first moment the token is
 named onchain, and the first moment the trade is readable.
 
 The gap between the two is usually seconds, occasionally minutes. A buy paid from an existing in-app
@@ -44,21 +48,23 @@ balance produces no user transaction at all until the solver's fill appears.
 ## Selling
 
 The swap half of a sell runs inside the user's own transaction, so it is legible in one receipt on
-the EVM chain the token lives on. The cash half is not on that chain at all. The operation approves
-Relay's router, routes through Relay's executor into the pools, and hands the proceeds to Relay's
-depository. One receipt carries the pool, the direction and both amounts.
+the EVM chain the token lives on. The cash half is not on that chain at all. Taking Relay, the
+operation approves Relay's router, routes through Relay's executor into the pools, and hands the
+proceeds to Relay's depository. Taking the intent route, it hands the token to that route's router,
+which swaps it for the chain's native asset and sends that into the route's contract. Either way one
+receipt carries the pool, the direction and both amounts.
 
 The proceeds never return to the wallet, which ends the trade holding nothing. They become a credit
-with Relay, paid out on Solana a second or two later by a solver. That payout is a separate
+with the route, paid out on Solana a second or two later by its solver. That payout is a separate
 transaction carrying no FOMO marker — the one leg of a FOMO trade no FOMO-keyed subscription can
 reach, which is why it gets its own listener ([`04-listening.md`](04-listening.md)). A sell that
 stays on one chain behaves differently: the cash lands directly in the wallet.
 
 ## Trades that stay on one chain
 
-When the cash and the token are already on the same chain, nothing has to cross. Relay is absent, no
-order id exists, and the trade is a single swap through an aggregator with the proceeds landing in
-the user's own wallet.
+When the cash and the token are already on the same chain, nothing has to cross. Neither route
+carries anything across, no order id exists, and the trade is a single swap with the proceeds
+landing in the user's own wallet.
 
 This is the ordinary path on Solana. On an EVM chain it is the exception: cash lives on Solana, so
 a token issued on an EVM chain is nearly always bought from the other side, and nearly every FOMO
@@ -67,8 +73,9 @@ holds a stablecoin on the chain can buy there directly: Relay's executor deliver
 the wallet's own operation, with no order id and no leg on Solana.
 
 Stablecoins do move on the EVM chains outside a trade. A FOMO wallet that received cash there
-deposits it into Relay, and a solver pays the same amount out on Solana a second later. That is the
-balance being consolidated, not a trade, and it carries no token.
+deposits it into Relay, or sends it through the intent route, and a solver pays the same amount out
+on Solana a second later. That is the balance being consolidated, not a trade, and it carries no
+token.
 
 The catalog keys tokens by address and chain, so the same ticker on two chains is two different
 assets. The user picks a listing, not a symbol.
@@ -77,7 +84,8 @@ assets. The user picks a listing, not a symbol.
 
 Six parties are paid on a crossing trade and the user is billed for none of them by a transfer.
 Everything FOMO and Relay take is inside the amounts the quote sets, and everything the pools take
-is inside the price the swap executes at.
+is inside the price the swap executes at. The table is a crossing through Relay; what the intent
+route charges is out of scope.
 
 | Cost | Who pays it | Where it shows up |
 |---|---|---|
@@ -106,15 +114,17 @@ Relay applies its own, much wider tolerance to the crossing leg.
 
 ## Watching this happen
 
-[`07_trace_trade.py`](../scripts/07_trace_trade.py) takes an EVM chain and either leg — a
-transaction on that chain or a Solana signature — or the order id itself, and prints both legs of
-one trade.
+[`07_trace_trade.py`](../scripts/07_trace_trade.py) takes an EVM chain and either leg of a trade —
+a transaction on that chain or a Solana signature — or its order id or intent id, and prints both
+legs of one trade, by either route.
 [`04-listening.md`](04-listening.md) covers the live feeds.
 
 ## Where this comes from
 
-Read from the chains. Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad and Solana mainnet,
-over Chainstack nodes, with the scripts in [`../scripts/`](../scripts/). A buy made with cash
+Read from the chains. Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad, Elysium and Solana
+mainnet, over Chainstack nodes, with the scripts in [`../scripts/`](../scripts/). The intent route's
+buy and sell were traced leg by leg on Elysium and Solana on 2026-11-09; the two trades are in
+[`05-crossing.md`](05-crossing.md). A buy made with cash
 already on an EVM chain was one of 12 EVM buys in a ten-minute recording of every chain on
 2026-10-30: a Base wallet carrying FOMO's delegation, in its own unsponsored operation, received
 the token from Relay's executor inside a `handleOps` bundle. The fee payers, the zero

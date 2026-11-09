@@ -158,11 +158,11 @@ bottom and any one step lifted out of it:
 A step that needs no network and no run state goes to `shared/evm.py` instead, where the other
 EVM scripts can reach it.
 
-`05` and `06` read a subject FOMO does not sign: Relay's payout solver, whose transfers no filter
-on FOMO can see. Their rows cannot be attributed to FOMO on their own — `00` names a payout only
-when its order id matches a sell it already saw. They reach that solver over the same two pipes
-`03` and `04` reach the co-signer over; what differs is the wire, and `06`'s docstring names the
-three facts a Geyser update states differently.
+`05` and `06` read a subject FOMO does not sign: the two payout solvers, Relay's and the intent
+route's, whose transfers no filter on FOMO can see. Their rows cannot be attributed to FOMO on their
+own — `00` names a payout only when its id matches a sell it already saw. They reach those solvers
+over the same two pipes `03` and `04` reach the co-signer over; what differs is the wire, and `06`'s
+docstring names the three facts a Geyser update states differently.
 
 ## Before calling a script done
 

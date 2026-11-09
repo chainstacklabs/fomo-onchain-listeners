@@ -1,17 +1,19 @@
 # How it works
 
-FOMO deploys no contracts. Its onchain footprint is assembled entirely from contracts it does not
-own, spread across six chains that do two different jobs: Solana holds the cash, and the tokens
-live wherever they were issued — on Solana itself, or on one of five EVM chains: Robinhood Chain,
-BNB Smart Chain, Base, Ethereum and Monad.
+FOMO's onchain footprint is assembled from public standards and other parties' contracts, spread
+across chains that do two different jobs: Solana holds the cash, and the tokens live wherever they
+were issued — on Solana itself, or on one of the EVM chains Robinhood Chain, BNB Smart Chain, Base,
+Ethereum, Monad and Elysium.
 
-## FOMO owns nothing onchain
+## What FOMO runs on
 
-No address in this document was deployed by FOMO: the ERC-4337 account standard, a
-cross-chain settlement protocol called
-[Relay](https://docs.relay.link/references/protocol/overview), and ordinary AMM pools. What FOMO
-owns is the app and the servers behind it — which tokens appear, what price is quoted, which route
-is chosen, who follows whom.
+The ERC-4337 account standard, two routes across chains — a settlement protocol called
+[Relay](https://docs.relay.link/references/protocol/overview), and a second route called here the
+intent route — and ordinary AMM pools. None of the account layer, Relay's contracts or the pools
+was deployed by FOMO. The intent route's contract was deployed by one EOA that nothing in this
+reference ties to FOMO or to anyone else; who operates it is out of scope. What FOMO owns is the app
+and the servers behind it — which tokens appear, what price is quoted, which route is chosen, who
+follows whom.
 
 That division decides what is knowable. The chain records what moved. It does not record why, and
 it never records what a user is about to do.
@@ -28,8 +30,8 @@ it never records what a user is about to do.
 ## Solana holds the cash
 
 The balance the app displays as `$` is USDC in the user's own Solana wallet, whichever chain they
-funded from. Money arriving on any other chain is paid into Relay there and lands on Solana as cash;
-nothing rests elsewhere. A FOMO wallet on an EVM chain holds no cash between trades, because the
+funded from. Money arriving on any other chain is paid into one of the two routes there and lands
+on Solana as cash; nothing rests elsewhere. A FOMO wallet on an EVM chain holds no cash between trades, because the
 stablecoin there is a quote asset a trade passes through rather than a balance anyone keeps.
 
 Tokens behave the opposite way. A token stays on the chain it was issued on, and buying one puts it
@@ -54,15 +56,15 @@ it. Solana is the hub and every EVM chain is a spoke: a crossing trade always ha
    operations contract + wallet       a plain keypair
         │                                  │
         ▼                                  ▼
-   ┌──────────────────── Relay ────────────────────┐
-   │  paid on one chain, delivered on the other,   │   crossing between chains
-   │  settled afterwards on Relay's own chain      │
+   ┌──────────── Relay, or the intent route ───────┐
+   │  paid on one chain, delivered on the other    │   crossing between chains
+   │  out of somebody else's inventory             │
    └────────────────────┬──────────────────────────┘
                         │
         ┌───────────────┴──────────────┐
         ▼ each EVM chain               ▼ Solana
-   Relay's router + executor     a solver, when a buy lands here
-                                 an aggregator, when it stays on Solana
+   Relay's router + executor,    a solver, when a buy lands here
+   or the intent contract        an aggregator, when it stays on Solana
         │                              │
         ▼                              ▼
    Uniswap, Pancake, Aerodrome     Raydium, Meteora, Orca, PumpSwap
@@ -98,9 +100,9 @@ contract**. A bundler hands it a batch of signed requests; it checks each signat
 wallet that signed, and writes one log line per operation carrying that wallet's address and its
 paymaster; one batch holds many operations, each closed by its own line. Nothing a FOMO wallet does
 reaches the chain any other way, so a single subscription to that one contract is the entire feed
-of what FOMO wallets sign on its chain. A token delivered to a wallet is not among them: the solver
-sends it, in a transaction of its own, and it is read from the `Transfer` logs of Relay's
-executor.
+of what FOMO wallets sign on its chain. A token delivered to a wallet is not among them: a solver or
+a relayer sends it, in a transaction of its own, and it is read from the `Transfer` logs of Relay's
+executor or the intent route's contract.
 
 The standard has been revised, and each revision is a separate contract at its own address, all of
 them live at once. FOMO uses **version 0.8** and nothing else — the version that accepts the 7702
@@ -120,9 +122,10 @@ Two consequences for anyone reading this chain:
 Solana needs none of this. The wallet is a plain keypair, and a co-signer supplies the signature
 that pays the fee — so the user's Solana address can hold no lamports and still trade.
 
-## Relay, and why buys look strange
+## Two routes across, and why buys look strange
 
-Relay is a settlement network rather than a bridge: nothing is locked or minted, and no asset
+FOMO crosses by two routes, and both carry its trades at the same time. Relay is a settlement
+network rather than a bridge: nothing is locked or minted, and no asset
 crosses anything. The user pays into Relay's depository on the chain their money is on, carrying a
 32-byte **order id** and nothing else; a **solver** holding its own capital on the destination chain
 sends the bought token out of its own pocket, in its own transaction — the **fill**; Relay reimburses
@@ -134,14 +137,23 @@ signed. It is also why the trade feels instant: nobody is waiting for a bridge.
 
 The same contracts are deployed at the same addresses on every EVM chain FOMO uses — a depository
 that holds deposits, a router that users and solvers call, and an executor that moves the tokens —
-and as a single program on Solana. [`05-relay.md`](05-relay.md) is the full account: order
-lifecycle, solvers, the settlement chain.
+and as a single program on Solana.
+
+The intent route does the same job with less onchain. On Solana the user sends USDC straight to the
+route's solver with an **intent id** in a memo; on the EVM chain a relayer calls the route's own
+contract, which swaps from its own inventory and delivers the token. A sell runs the other way: the
+wallet sends the chain's native asset into that contract, and the solver pays USDC out on Solana
+with the same id. The contract is at one address on BNB Smart Chain, Robinhood Chain, Base and
+Elysium, and absent from Ethereum and Monad. [`05-crossing.md`](05-crossing.md) is the full account
+of both routes.
 
 ## Routing and venues
 
-On an EVM chain, FOMO's server builds the route and returns a ready-to-sign transaction. The trade
-reaches the pools through **Relay**: the operation approves Relay's router, calls it, and Relay's
-executor makes the inner calls that run the swap. The slippage limit is compiled into the
+On an EVM chain, FOMO's server builds the route and returns a ready-to-sign transaction. A trade
+taking Relay reaches the pools through **Relay**: the operation approves Relay's router, calls it,
+and Relay's executor makes the inner calls that run the swap. A sell taking the intent route calls
+that route's own router instead, which runs the swap and sends the proceeds into the route's
+contract. The slippage limit is compiled into the
 route as a minimum acceptable output, so the contract enforces it rather than the app.
 
 The executor is not always the address that touches the pools. On Robinhood Chain, in about a third
@@ -166,9 +178,9 @@ at least three of them carry FOMO flow, so nothing should be keyed on one router
 |---|---|---|
 | Wallet | one address on all of them, plus borrowed contract code | plain keypair |
 | How an action reaches the chain | signed request, submitted by a bundler | signed transaction, submitted through Jito |
-| Who pays the network fee | the bundler, with no paymaster | FOMO's co-signer, except a payout, which a Relay solver signs and pays for |
+| Who pays the network fee | the bundler, with no paymaster | FOMO's co-signer, except a payout, which a solver signs and pays for |
 | What marks it as FOMO's | the delegation, and no paymaster on the operation | the co-signer |
-| Route chosen inside the user's transaction? | yes, run by Relay's router and executor | only when the trade stays on Solana |
+| Route chosen inside the user's transaction? | yes, run by Relay's router and executor or the intent route's router | only when the trade stays on Solana |
 | Holds the cash balance | no | yes |
 
 ## Watching it
@@ -182,30 +194,34 @@ cross-chain trade.
 ## Address book
 
 Every address this document names, with the rest of them, is in
-[`07-addresses.md`](07-addresses.md) — the account layer and Relay shared by every EVM chain, what
-differs per chain, Solana, Relay Chain and the offchain hosts. The machine-readable copy is
+[`07-addresses.md`](07-addresses.md) — the account layer and Relay shared by every EVM chain, the
+intent route, what differs per chain, Solana, Relay Chain and the offchain hosts. The machine-readable copy is
 [`../scripts/maintenance/registry.json`](../scripts/maintenance/registry.json).
 
 ## What the chains provide
 
 The chain, and nothing else. No contract of any chain's operator is called at any point in a buy or
-a sell: the account layer is a public standard, the crossing and the routing are Relay's, and the
-pools are third-party deployments. FOMO is a tenant on every chain, not a partner.
+a sell: the account layer is a public standard, the crossing and the routing are Relay's or the
+intent route's, and the pools are third-party deployments. FOMO is a tenant on every chain, not a partner.
 
 ## Where this comes from
 
-Read from the chains. Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad and Solana mainnet,
-over Chainstack nodes. The addresses, topics, event signatures and decimals are
-[`registry.json`](../scripts/maintenance/registry.json), re-verified 2026-10-30 on every chain by
+Read from the chains. Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad, Elysium and Solana
+mainnet, over Chainstack nodes. The addresses, topics, event signatures and decimals are
+[`registry.json`](../scripts/maintenance/registry.json), re-verified 2026-11-09 on every chain
+above, Elysium included, by
 [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py). That the same
 contracts serve FOMO on the four chains beyond Robinhood Chain, that wallets recorded on Robinhood
 Chain carry the same delegation there, and that other applications share it was measured on
 2026-10-30 by [`maintenance/probe_chain.py`](../scripts/maintenance/probe_chain.py). The paymaster
-test was checked the same day against Relay's `referrer` field: of 16 deposits from wallets
-carrying the delegation on BNB Smart Chain and Base, the 8 with no paymaster were all FOMO's and the
-8 sponsored by one were all another application's. The Settler's share
-of the route was measured on 2026-09-08 over blocks 57993000–57993400, where it was a party to the
-token transfers in 70 of 221 bundles.
+test was checked the same day against Relay's `referrer` field: of 16 deposits from wallets carrying
+the delegation on BNB Smart Chain and Base, the 8 with no paymaster were all FOMO's and the 8
+sponsored by one were all another application's. The Settler's share of the route was measured on
+2026-09-08 over blocks 57993000–57993400, where it was a party to the token transfers in 70 of 221
+bundles. Elysium was probed the same way on 2026-11-09, its launch day: every contract present, 171
+of 172 senders through version 0.8 carrying the delegation, all of their operations submitted by the
+`0x4337…` fleet and none naming a paymaster. The intent route, its deployer and its creation dates
+were read the same day; [`05-crossing.md`](05-crossing.md) lists what.
 
 From FOMO's app. The offchain hosts, which price is quoted and which route the server chooses, and
 that the server returns a ready-to-sign transaction — app traffic, iOS v1.87.1, captured

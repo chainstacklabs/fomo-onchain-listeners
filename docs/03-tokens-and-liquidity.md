@@ -20,9 +20,9 @@ liquidity, volume and price change over several windows, holder and transaction 
 the price is read from, social links, an origin block naming the launchpad and its bonding-curve
 progress, and safety flags including mint and freeze authorities.
 
-The catalog spans six chains: Solana, Robinhood Chain, Base, Ethereum, BNB Smart Chain and Monad,
-and every one of them carries FOMO trades. The app tells the server which of them its build
-understands; the server decides everything else.
+The catalog spans Solana, Robinhood Chain, Base, Ethereum, BNB Smart Chain, Monad and Elysium, and
+every one of them carries FOMO trades. The app tells the server which of them its build understands;
+the server decides everything else.
 
 ## Discovery is a server decision
 
@@ -79,6 +79,11 @@ PancakeSwap's V3 and Infinity pools beside Uniswap V2 and V4 on BNB Smart Chain,
 with Aerodrome's pools on Base, Uniswap on Ethereum. The addresses are in
 [`07-addresses.md`](07-addresses.md).
 
+### Elysium
+
+The same shape again, quoted in USDC at six decimals, and its native asset is HYPE. FOMO's trades
+there run through Uniswap V4, V3 and V2 pools.
+
 ### Solana
 
 **USDC is the quote asset**, at six decimals, and the liquidity is the ordinary Solana ecosystem,
@@ -97,7 +102,13 @@ the four other EVM chains, from the tokens wallets carrying FOMO's delegation de
 on 2026-10-30, with symbol and decimals re-read by the verifier the same day; their venues, from the
 swap event shapes inside FOMO's fills and deposits on those chains the same day. Aerodrome's pools
 are named by the factory they report: 14 of 15 Solidly-shaped pools swapping on Base on 2026-10-30
-answered `factory()` with Aerodrome's.
+answered `factory()` with Aerodrome's. Elysium's quote asset, from the 303 deposits wallets carrying
+FOMO's delegation made into Relay over about 20 minutes on 2026-11-09, all of them USDC; its
+venues, from the swap event shapes inside the FOMO trades the listeners recorded there the same
+day.
+
+Elysium's place in the catalog is read from the chain: FOMO's wallets traded tokens there from its
+mainnet launch on 2026-11-09, which the app can only do for tokens its catalog lists.
 
 From FOMO's app. The catalog, the discovery feeds, the tradability gate, the launchpad fields and
 the perpetuals listing — iOS v1.87.1, captured 2026-08-31, and free to change on any build.

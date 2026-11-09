@@ -1,7 +1,8 @@
 """Follow one FOMO trade across Solana and an EVM chain, using nothing but the two chains.
 
 A cross-chain trade is two transactions that share nothing an explorer will join for you.
-The link is a 32-byte order id written on both sides, so the join needs no third party.
+The link is an id written on both sides, so the join needs no third party. FOMO crosses by
+two routes and each writes its own: Relay a 32-byte order id, the intent route an intent id.
 Relay's REST API can also resolve an order id, and this script used to depend on it, but
 that API is throttled, retires on 2026-11-24, and its replacement wants a key.
 
@@ -18,10 +19,21 @@ A sell's payout is signed by a Relay solver and not by FOMO's co-signer, so no l
 this repository sees it — the co-signer subscription never receives that transaction. This
 script finds it by reading the solver's own recent transactions.
 
+The intent route has the same two directions with the id in different places:
+
+  buy    Solana pays the intent solver with `{"intentId":"<id>"}` in a memo; on the EVM chain
+         a relayer's fill emits the id event beside the delivery.
+  sell   The wallet's own operation sends the native asset into the intent contract, which
+         emits the id event; the intent solver pays out on Solana with the bare id in a memo.
+
+Both of its legs are found by their id alone: the contract's id events on the EVM chain, and
+the intent solver's recent transactions on Solana, which hold its payments and its payouts.
+
 Takes the EVM chain to search, one of shared/evm.py's `CHAINS`, then any one of a
-transaction on it (0x, 66 chars — a solver's fill or a deposit
-in either asset shape), a Solana signature (base58, either a Relay deposit or a settlement),
-or an order id (0x, 66 chars, from either side), and searches for the counterpart in both
+transaction on it (0x, 66 chars — a solver's fill, a deposit in either asset shape, or an
+intent-route fill or send), a Solana signature (base58, a Relay deposit or settlement, or an
+intent-route payment or payout), an order id (0x, 66 chars, from either side) or an intent id
+(7, 7 and 3 hex characters joined by hyphens), and searches for the counterpart in both
 directions. Searching is bounded by the minutes argument, because without an index the only
 way to find a transaction by its contents is to read a window of them.
 
@@ -31,12 +43,12 @@ round trips. A load-balanced endpoint can answer a range short when its end is p
 answering backend's head (docs/04-listening.md, Transports), so a miss re-reads the head and
 sweeps the tail again before reporting nothing.
 
-Reference: docs/04-listening.md (Joining the two legs), docs/05-relay.md (Following one order).
+Reference: docs/04-listening.md (Joining the two legs), docs/05-crossing.md (Following one order).
 
 A `handleOps` bundle carries several users, so a transaction holding more than one deposit
 names a transaction and not a trade: the first is followed and the count is printed.
 
-    uv run scripts/07_trace_trade.py <chain> <tx hash | signature | order id> [minutes]     default 5
+    uv run scripts/07_trace_trade.py <chain> <tx hash | signature | order id | intent id> [minutes]     default 5
 """
 
 import sys
@@ -52,15 +64,39 @@ from shared.evm import (
     DEPOSIT,
     DEPOSITORY,
     EXECUTOR_TOPICS,
+    INTENT,
+    INTENT_FILLED,
+    INTENT_ID,
+    INTENT_SENT,
     NATIVE_DEPOSIT,
     ROUTERS,
     SYMBOL,
     TRANSFER,
+    USEROP,
     decode_string,
+    delivered_to,
+    intent_buyer,
+    intent_ids,
+    intent_sent,
+    moved_from,
+    span,
     topic,
     word,
 )
-from shared.solana import DEPOSIT_DISCRIMINATOR, MEMO_PROGRAMS, RELAY_DEPOSIT, SETTLEMENT_SOLVER, TX_VERSION, mint_name
+from shared.solana import (
+    CO_SIGNER,
+    DEPOSIT_DISCRIMINATOR,
+    INTENT_ID_SHAPE,
+    INTENT_SOLVER,
+    KNOWN,
+    MEMO_PROGRAMS,
+    RELAY_DEPOSIT,
+    SETTLEMENT_SOLVER,
+    TX_VERSION,
+    mint_name,
+    payment_id,
+    payout_id,
+)
 from web3 import Web3
 
 here = CHAINS[cli.evm_chain()]
@@ -383,6 +419,189 @@ def show_deposit(tx_hash, order_id):
     print(f"    block          {receipt['blockNumber']}")
 
 
+# ------------------------------------------------------------------- the intent route
+USDC = next(mint for mint, name in KNOWN.items() if name == "USDC")
+# Read over raw JSON-RPC rather than web3, so a log reaches shared/evm.py's helpers in the
+# shape the listeners hand them: hex strings, not bytes.
+
+
+def evm_rpc(method, params):
+    """One JSON-RPC call to the EVM endpoint; None on an error."""
+    body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return requests.post(EVM, json=body, timeout=60).json().get("result")
+
+
+def fetch_solana(signature):
+    options = {"encoding": "jsonParsed", "maxSupportedTransactionVersion": TX_VERSION}
+    body = {"jsonrpc": "2.0", "id": 1, "method": "getTransaction", "params": [signature, options]}
+    return requests.post(SOLANA, json=body, timeout=60).json().get("result")
+
+
+def intent_memos(tx):
+    """Every intent id a Solana transaction carries in a memo, as a payment or as a payout."""
+    found = []
+    for instruction in tx["transaction"]["message"]["instructions"]:
+        note = instruction.get("parsed")
+        if instruction.get("programId") in MEMO_PROGRAMS and isinstance(note, str):
+            found.append(payment_id(note) or (note if INTENT_ID_SHAPE.fullmatch(payout_id(note)) else ""))
+    return [f for f in found if f]
+
+
+def intent_of(value):
+    """(intent id, EVM transaction, Solana signature, Solana transaction) behind `value`.
+
+    The intent id is "" when `value` is no part of an intent-route trade, which leaves it to
+    the Relay path below. A Relay deposit or fill reads as nothing here.
+    """
+    if INTENT_ID_SHAPE.fullmatch(value):
+        return value, "", "", None
+    if value.startswith("0x") and len(value) == 66:
+        receipt = evm_rpc("eth_getTransactionReceipt", [value])
+        logs = (receipt or {}).get("logs") or []
+        ids = intent_ids(logs)
+        for log in logs:
+            if log["address"].lower() == INTENT and topic(log) in (INTENT_FILLED, INTENT_SENT):
+                return ids.get(topic(log, 1), ""), value, "", None
+        return "", "", "", None
+    if len(value) > 60:
+        tx = fetch_solana(value)
+        found = intent_memos(tx) if tx else []
+        if found:
+            return found[0], "", value, tx
+    return "", "", "", None
+
+
+def id_in(log):
+    """The intent id an id event states, in ASCII in one word."""
+    return bytes.fromhex(log["data"][2:66]).rstrip(b"\x00").decode(errors="replace")
+
+
+def sweep_intents(intent, low, high):
+    """The transaction in blocks low..high whose id event names `intent`, or ""."""
+    for start in range(high, low, -SWEEP):
+        criteria = {"fromBlock": hex(max(start - SWEEP + 1, low)), "toBlock": hex(start)}
+        for log in evm_rpc("eth_getLogs", [{**criteria, "address": INTENT, "topics": [INTENT_ID]}]) or []:
+            if id_in(log) == intent:
+                return log["transactionHash"]
+    return ""
+
+
+def find_intent_evm(intent):
+    """The intent-route trade on this chain carrying `intent`, re-read once against a fresh head."""
+    head = w3.eth.block_number
+    low = head - int(minutes * 60 / BLOCK_SECONDS)
+    print(f"  searching {here.name} intent-route trades over blocks {low}-{head}")
+    found = sweep_intents(intent, low, head)
+    again = w3.eth.block_number
+    if not found and again > head:
+        found = sweep_intents(intent, max(low, head - SWEEP), again)
+    return found
+
+
+def find_intent_solana(intent):
+    """The intent solver's payment or payout whose memo carries `intent`.
+
+    A payout is signed by the solver and lists under its address. A payment is a transfer
+    into the solver's USDC account, which names that account and not the solver, so it
+    lists only under the account: both are read.
+    """
+    body = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTokenAccountsByOwner",
+        "params": [INTENT_SOLVER, {"mint": USDC}, {"encoding": "jsonParsed"}],
+    }
+    accounts = [a["pubkey"] for a in requests.post(SOLANA, json=body, timeout=60).json()["result"]["value"]]
+    seen = recent_signatures(INTENT_SOLVER, "intent-solver payouts")
+    for account in accounts:
+        seen += recent_signatures(account, "payments into the intent solver")
+    options = {"encoding": "jsonParsed", "maxSupportedTransactionVersion": TX_VERSION}
+    for start in range(0, len(seen), 100):
+        chunk = seen[start : start + 100]
+        fetched = batch(SOLANA, [("getTransaction", [s["signature"], options]) for s in chunk])
+        for signature, tx in zip(chunk, fetched, strict=True):
+            if tx and intent in intent_memos(tx):
+                return signature["signature"], tx
+    return "", None
+
+
+def shown(raw, address):
+    symbol, decimals = token(Web3.to_checksum_address(address))
+    return f"{raw / 10**decimals:.6f} {symbol}" if decimals is not None else f"? {raw} raw, {symbol}"
+
+
+def show_intent_evm(tx_hash, intent):
+    """The EVM leg: a relayer's fill delivering a token, or a wallet's send into the contract."""
+    logs = evm_rpc("eth_getTransactionReceipt", [tx_hash])["logs"]
+    key = next((k for k, v in intent_ids(logs).items() if v == intent), "")
+    for log in logs:
+        if log["address"].lower() != INTENT or topic(log, 1) != key:
+            continue
+        if topic(log) == INTENT_FILLED:
+            buyer = intent_buyer(evm_rpc("eth_getTransactionByHash", [tx_hash]))
+            print(f"\n  filled on {here.name}   {tx_hash}")
+            landed = delivered_to(logs, buyer) if buyer else None
+            if landed:
+                print(f"    delivered      {shown(landed[1], landed[0])}  ({landed[0]})")
+            print(f"    to             {buyer or '?'}")
+        elif topic(log) == INTENT_SENT:
+            user, raw = intent_sent(log)
+            operations = [int(op["logIndex"], 16) for op in logs if topic(op) == USEROP]
+            start, end = span(operations, int(log["logIndex"], 16))
+            sold = moved_from(logs, user, start, end)
+            recipient = base58.b58encode(bytes.fromhex(word(log["data"][2:], 1))).decode()
+            print(f"\n  sent on {here.name}   {tx_hash}")
+            if sold:
+                print(f"    sold           {shown(sold[1], sold[0])}  ({sold[0]})")
+            print(f"    sent           {raw / 1e18:.6f} {here.native}, to {recipient} on Solana")
+            print(f"    from           {user}")
+    print(f"    block          {int(evm_rpc('eth_getTransactionByHash', [tx_hash])['blockNumber'], 16)}")
+
+
+def show_intent_payment(signature, tx):
+    """The Solana leg of a buy: the user's USDC into the intent solver."""
+    print(f"\n  paid on Solana   {signature}")
+    signers = [k["pubkey"] for k in tx["transaction"]["message"]["accountKeys"] if k.get("signer")]
+
+    def held(side):
+        return {(b.get("owner"), b["mint"]): float(b["uiTokenAmount"]["uiAmountString"]) for b in tx["meta"][side]}
+
+    before, after = held("preTokenBalances"), held("postTokenBalances")
+    to_solver = [(after[k] - before.get(k, 0), k[1]) for k in after if k[0] == INTENT_SOLVER]
+    print(f"    payer          {next((s for s in signers if s != CO_SIGNER), '?')}")
+    if to_solver:
+        amount, mint = max(to_solver)
+        print(f"    amount         {amount:.6f} {mint_name(mint)}")
+    print(f"    slot           {tx['slot']}")
+
+
+def trace_intent(intent, evm_tx, signature, tx):
+    """Both legs of one intent-route trade, found by the id each of them states."""
+    print(f"  intent id {intent}")
+    if not evm_tx:
+        evm_tx = find_intent_evm(intent)
+    if not signature:
+        signature, tx = find_intent_solana(intent)
+    # The Solana leg says which way the trade ran: the solver signs a payout, never a payment.
+    paid_out = bool(tx) and tx["transaction"]["message"]["accountKeys"][0]["pubkey"] == INTENT_SOLVER
+    if tx and not paid_out:
+        show_intent_payment(signature, tx)
+    elif not tx:
+        print(f"\n  on Solana   not found in the last {minutes} min — widen the window")
+    if evm_tx:
+        show_intent_evm(evm_tx, intent)
+    else:
+        print(f"\n  on {here.name}   not found in the last {minutes} min — another chain, or widen the window")
+    if paid_out:
+        show_settlement(signature, tx)
+
+
+intent, intent_evm, intent_signature, intent_tx = intent_of(target)
+if intent:
+    print(f"intent-route trade, from {target}")
+    trace_intent(intent, intent_evm, intent_signature, intent_tx)
+    sys.exit()
+
 order_id, source = "", ""
 solana_signature, solana_tx, solana_amount = "", None, 0
 evm_tx = ""
@@ -426,7 +645,7 @@ elif len(target) > 60:
     else:
         sys.exit("  no Relay deposit and no order id memo — this is not a leg of a cross-chain trade")
 else:
-    sys.exit(f"give a {here.name} transaction, a Solana signature, or an order id")
+    sys.exit(f"give a {here.name} transaction, a Solana signature, an order id or an intent id")
 
 if order_id != target:
     print(f"  order id {order_id}")

@@ -10,6 +10,11 @@ shared/solana.py from what the wallet's balances did. FOMO routes swaps through 
 one program — DFlow, Jupiter and a third, unnamed router have all been seen — so a swap is
 recognised by what moved rather than by the program called, and the router is reported.
 
+A payment is cash leaving for another chain, by either of FOMO's two routes: a deposit into
+Relay's program, which names its order id in the instruction, or a USDC transfer to the
+intent solver with the intent id in a memo. Either id is what joins the payment to the
+buy it pays for. A memo arrives here as raw instruction data, so it is decoded first.
+
 Closing a wrapped-SOL account refunds its rent to the wallet, which shows up as a few
 thousandths of a SOL next to the real trade; SOL movements that small are ignored whenever
 anything else moved.
@@ -31,7 +36,15 @@ import grpc
 from geyser.generated import geyser_pb2_grpc
 from shared import cli, env, geyser
 from shared.feed import Trade
-from shared.solana import CO_SIGNER, DEPOSIT_DISCRIMINATOR, RELAY_DEPOSIT, classify
+from shared.solana import (
+    CO_SIGNER,
+    DEPOSIT_DISCRIMINATOR,
+    INTENT_SOLVER,
+    MEMO_PROGRAMS,
+    RELAY_DEPOSIT,
+    classify,
+    payment_id,
+)
 
 ENDPOINT = env.optional("GEYSER_ENDPOINT")
 
@@ -97,6 +110,14 @@ async def listen(deadline, watched, emit, counts):
             before, after = amounts(meta.pre_token_balances), amounts(meta.post_token_balances)
             every = list(meta.pre_token_balances) + list(meta.post_token_balances)
             owners = {(b.account_index, b.mint): b.owner for b in every}
+            # The other route: USDC to the intent solver, the id in a memo. The solver itself
+            # need not be among the keys, only its token account, so its ownership of a
+            # balance is the test.
+            intent = ""
+            if INTENT_SOLVER in owners.values():
+                for instruction in message.instructions:
+                    if instruction.program_id_index < len(keys) and keys[instruction.program_id_index] in MEMO_PROGRAMS:
+                        intent = payment_id(bytes(instruction.data).decode("utf-8", "ignore")) or intent
             moved = []
             for account in set(before) | set(after):
                 if owners.get(account) != user:
@@ -113,7 +134,8 @@ async def listen(deadline, watched, emit, counts):
                     if abs(lamports) > 1e-9:
                         moved.append((lamports, "SOL"))
 
-            kind, gave, got, note = classify(moved, programs, RELAY_DEPOSIT in programs)
+            kind, gave, got, note = classify(moved, programs, RELAY_DEPOSIT in programs or bool(intent))
+            order = order or intent
             counts[kind] += 1
             signature = base58.b58encode(info.signature).decode()
             emit(Trade(kind, gave, got, user, "fomo", note, f"slot {update.transaction.slot}", signature, order))

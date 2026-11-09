@@ -28,7 +28,7 @@ which is why none of them belongs in docs/ without that said out loud.
 Addresses, topics and program ids come from maintenance/registry.json and shared/ rather
 than from copies kept here, so verify_registry.py covers what this reads.
 
-Reference: docs/05-relay.md, docs/04-listening.md (Telling FOMO apart from everything else).
+Reference: docs/05-crossing.md, docs/04-listening.md (Telling FOMO apart from everything else).
 
     uv run scripts/maintenance/relay_share.py [minutes]      default 15
 """
@@ -544,9 +544,9 @@ def main():
     if total_usd:
         print(f"  against all of Relay               {(fomo_rh + fomo_solana) / total_usd * 100:.1f}%")
     print("\n  Both halves are measured on the chain the money left, against a denominator")
-    print("  attested on Relay's. FOMO also trades on BNB Smart Chain, Base, Ethereum and")
-    print("  Monad; deposits originating there are in the denominator and not in FOMO's")
-    print("  share, so this is a floor.")
+    print("  attested on Relay's. FOMO also trades on BNB Smart Chain, Base, Ethereum,")
+    print("  Monad and Elysium; deposits originating there are in the denominator and not")
+    print("  in FOMO's share, so this is a floor.")
 
 
 if __name__ == "__main__":
