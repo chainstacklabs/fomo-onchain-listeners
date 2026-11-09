@@ -401,10 +401,11 @@ That makes the join local and free, in both directions and by either route: hold
 id and match each fill against them. [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) does exactly that while
 every chain is streaming, printing a filled buy together with the payment that bought it, and a
 payout together with the sell it settles or the cash it moved.
-[`07_trace_trade.py`](../scripts/07_trace_trade.py) does it after the fact in either direction for
-Relay's trades — the intent route's are out of its scope —
-taking a transaction hash, a Solana signature or an order id and printing both legs — for a sell it
-reads the solver's own recent transactions, since nothing indexes a memo. For a wallet rather than
+[`07_trace_trade.py`](../scripts/07_trace_trade.py) does it after the fact in either direction and
+by either route, taking a transaction hash, a Solana signature, an order id or an intent id and
+printing both legs. Nothing indexes a memo, so it reads the solvers' own recent transactions: a
+Relay payout under the solver's address, and for the intent route both the solver's address, which
+its payouts list under, and its USDC token account, which the payments into it list under. For a wallet rather than
 one trade, [`08_wallet.py`](../scripts/08_wallet.py) reads its past on one EVM chain, and
 [`maintenance/active_wallets.py`](../scripts/maintenance/active_wallets.py) mines recorded runs
 for the addresses that keep trading, joining each one's two chains by the same order id.

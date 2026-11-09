@@ -114,9 +114,9 @@ Relay applies its own, much wider tolerance to the crossing leg.
 
 ## Watching this happen
 
-[`07_trace_trade.py`](../scripts/07_trace_trade.py) takes an EVM chain and either leg of a trade
-through Relay — a transaction on that chain or a Solana signature — or the order id itself, and
-prints both legs of one trade.
+[`07_trace_trade.py`](../scripts/07_trace_trade.py) takes an EVM chain and either leg of a trade —
+a transaction on that chain or a Solana signature — or its order id or intent id, and prints both
+legs of one trade, by either route.
 [`04-listening.md`](04-listening.md) covers the live feeds.
 
 ## Where this comes from

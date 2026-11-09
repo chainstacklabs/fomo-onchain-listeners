@@ -52,7 +52,7 @@ MEMO_PROGRAMS = {
 # from the same solver with the bare id in a memo. The id is the same string the route's
 # contract emits on the EVM chain, so it joins the two legs the way a Relay order id does.
 INTENT_SOLVER = "oMcssxWxgooErb8bsRA4QN34VHhvfeEbdDjrwF6WH45"
-INTENT_ID = re.compile(r"[0-9a-f]{7}-[0-9a-f]{7}-[0-9a-f]{3}")
+INTENT_ID_SHAPE = re.compile(r"[0-9a-f]{7}-[0-9a-f]{7}-[0-9a-f]{3}")
 # Both solvers sign their own payouts; `05` and `06` read the two of them.
 SOLVERS = (SETTLEMENT_SOLVER, INTENT_SOLVER)
 
@@ -63,7 +63,7 @@ def payment_id(note):
         value = json.loads(note).get("intentId", "")
     except Exception:
         return ""
-    return value if isinstance(value, str) and INTENT_ID.fullmatch(value) else ""
+    return value if isinstance(value, str) and INTENT_ID_SHAPE.fullmatch(value) else ""
 
 
 def payout_id(note):
@@ -74,7 +74,7 @@ def payout_id(note):
     """
     if note.startswith("0x") and len(note) == 66:
         return note.lower()
-    return note if INTENT_ID.fullmatch(note) else ""
+    return note if INTENT_ID_SHAPE.fullmatch(note) else ""
 
 
 ROUTERS = {

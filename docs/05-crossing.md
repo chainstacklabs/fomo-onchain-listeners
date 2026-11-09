@@ -87,7 +87,7 @@ chain, and caps how much it can fill before settlement returns its money.
 
 The order id is written on both chains, so the two legs join by reading them:
 [`07_trace_trade.py`](../scripts/07_trace_trade.py) takes either leg or the order id itself and
-finds the other.
+finds the other. It does the same for the intent route, given either leg or the intent id.
 
 > [!NOTE]
 > Relay's own API is on its way out. `/requests/v2` answers without a key until its sunset on
@@ -218,9 +218,12 @@ transactions on Elysium, Robinhood Chain and BNB Smart Chain were either an id e
 id event with a send, or one of the two non-trade events; every send went to `solana:solana` in the
 native asset, and every sender sampled carried FOMO's delegation. Every fill in those windows was
 sent by one of the two relayers, 126 and 119 of 250 on Elysium, in one of the two call shapes. That
-word 2 of either call is the buyer was read off calls on all three chains, and the code at each address and the creation
-transactions were read the same day. Every intent id seen had the 7-7-3 shape. The contract,
-both solvers and the four events are re-checked by
+word 2 of either call is the buyer was read off calls on all three chains, and the code at each
+address and the creation transactions were read the same day. Every intent id seen had the 7-7-3
+shape. [`07_trace_trade.py`](../scripts/07_trace_trade.py) traced an intent buy from its id and an
+intent sell from its Elysium transaction, both legs each, the same day; a payment into the solver
+lists under its USDC token account and not under its address. The contract, both solvers and the
+four events are re-checked by
 [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py).
 
 From Relay's documentation and API. The order lifecycle, the oracle's part in reimbursing a solver,
