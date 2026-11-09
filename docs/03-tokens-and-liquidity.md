@@ -20,10 +20,9 @@ liquidity, volume and price change over several windows, holder and transaction 
 the price is read from, social links, an origin block naming the launchpad and its bonding-curve
 progress, and safety flags including mint and freeze authorities.
 
-The catalog spans six chains: Solana, Robinhood Chain, Base, Ethereum, BNB Smart Chain and Monad,
-and every one of them carries FOMO trades. The app tells the server which of them its build
-understands; the server decides everything else. Elysium, whose mainnet launched on 2026-11-09,
-carries FOMO trades from its first day and postdates the catalog read here.
+The catalog spans seven chains: Solana, Robinhood Chain, Base, Ethereum, BNB Smart Chain, Monad and
+Elysium, and every one of them carries FOMO trades. The app tells the server which of them its build
+understands; the server decides everything else.
 
 ## Discovery is a server decision
 
@@ -107,6 +106,9 @@ answered `factory()` with Aerodrome's. Elysium's quote asset, from the 303 depos
 FOMO's delegation made into Relay over about 20 minutes on 2026-11-09, all of them USDC; its
 venues, from the swap event shapes inside the FOMO trades the listeners recorded there the same
 day.
+
+Elysium's place in the catalog is read from the chain: FOMO's wallets traded tokens there from its
+mainnet launch on 2026-11-09, which the app can only do for tokens its catalog lists.
 
 From FOMO's app. The catalog, the discovery feeds, the tradability gate, the launchpad fields and
 the perpetuals listing — iOS v1.87.1, captured 2026-08-31, and free to change on any build.
