@@ -208,8 +208,8 @@ intent route's, and the pools are third-party deployments. FOMO is a tenant on e
 
 Read from the chains. Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad, Elysium and Solana
 mainnet, over Chainstack nodes. The addresses, topics, event signatures and decimals are
-[`registry.json`](../scripts/maintenance/registry.json), re-verified 2026-10-30 on every chain by
-[`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py). That the same
+[`registry.json`](../scripts/maintenance/registry.json), re-verified 2026-11-09 on all seven chains,
+Elysium included, by [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py). That the same
 contracts serve FOMO on the four chains beyond Robinhood Chain, that wallets recorded on Robinhood
 Chain carry the same delegation there, and that other applications share it was measured on
 2026-10-30 by [`maintenance/probe_chain.py`](../scripts/maintenance/probe_chain.py). The paymaster

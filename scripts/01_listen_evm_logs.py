@@ -109,6 +109,7 @@ MAX_FRAME_BYTES = 32 * 1024 * 1024
 OPEN_TIMEOUT = 30
 OPERATION_WAITS = 6  # how many times a deposit waits for its own operation to arrive
 OPERATION_WAIT = 0.5  # seconds per wait
+RECEIPTS_KEPT = 2000  # intent-route receipts remembered before the cache is dropped; each is a whole receipt
 
 
 # --------------------------------------------------------------------- asking the node
@@ -620,6 +621,10 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                         paid_for.clear()
                         sender_of.clear()
                         orders.clear()
+                    # Bounded on their own: an intent-route trade adds a receipt here without
+                    # adding to the Relay caches above, and on a chain where nearly every trade
+                    # takes that route those would never reach their bound.
+                    if len(receipts) > RECEIPTS_KEPT:
                         receipts.clear()
                         transactions.clear()
 

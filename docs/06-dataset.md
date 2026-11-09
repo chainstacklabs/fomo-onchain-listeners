@@ -14,7 +14,7 @@ came from can be read against each other without an offset in between.
 | `t` | float | seconds since this listener started, to a millisecond. Restarts at zero every run |
 | `at` | string | wall clock, ISO 8601 with a UTC offset. Use this to join anything outside the file |
 | `run` | string | the run that produced the row, matching the filename. Survives a concatenation |
-| `chain` | string | `SOL` for Solana; `RH`, `BSC`, `BASE`, `ETH` or `MON` for an EVM chain |
+| `chain` | string | `SOL` for Solana; `RH`, `BSC`, `BASE`, `ETH`, `MON` or `ELY` for an EVM chain |
 | `kind` | string | `BUY` `SELL` `PAY` `SWAP` `FILL` `IN` `OUT` `OTHER`, defined in `shared/feed.py` |
 | `gave` | string | what left the wallet, as `<amount> <symbol>`, or one of the sentences below |
 | `got` | string | what arrived, same shape |
@@ -23,7 +23,7 @@ came from can be read against each other without an offset in between.
 | `note` | string | the venues a trade ran through, joined by `+` |
 | `where` | string | `blk <number>` on an EVM chain, `slot <number>` on Solana |
 | `key` | string | `<transaction>#<log index>` on an EVM chain, the signature on Solana |
-| `order_id` | string | the id the trade's route writes on both chains: Relay's 32-byte order id as `0x…`, or the intent route's id as 19 characters, 7 hex, 7 hex and 3 hex joined by hyphens. Empty when the trade did not cross, `?` when a fill's transaction or an intent trade's receipt could not be fetched. `?` is not an id and joins nothing |
+| `order_id` | string | the id the trade's route writes on both chains: Relay's 32-byte order id as `0x…`, or the intent route's id as 19 characters, 7 hex, 7 hex and 3 hex joined by hyphens. Empty when the trade did not cross, `?` when a Relay fill's transaction could not be fetched or an intent trade's receipt held no id event for it. `?` is not an id and joins nothing. An intent trade whose receipt could not be fetched at all is counted and not recorded by the log listener, and swept again by the block listener |
 
 ## Amounts
 

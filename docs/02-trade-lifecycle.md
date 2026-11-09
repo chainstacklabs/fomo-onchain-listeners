@@ -62,9 +62,9 @@ stays on one chain behaves differently: the cash lands directly in the wallet.
 
 ## Trades that stay on one chain
 
-When the cash and the token are already on the same chain, nothing has to cross. Neither route is
-involved, no order id exists, and the trade is a single swap through an aggregator with the proceeds landing in
-the user's own wallet.
+When the cash and the token are already on the same chain, nothing has to cross. Neither route
+carries anything across, no order id exists, and the trade is a single swap with the proceeds
+landing in the user's own wallet.
 
 This is the ordinary path on Solana. On an EVM chain it is the exception: cash lives on Solana, so
 a token issued on an EVM chain is nearly always bought from the other side, and nearly every FOMO

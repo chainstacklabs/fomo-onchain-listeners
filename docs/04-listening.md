@@ -344,9 +344,9 @@ solvers:
 | [`06_listen_relay_payouts_grpc.py`](../scripts/06_listen_relay_payouts_grpc.py) | Yellowstone gRPC, a paid add-on | the whole transaction, pushed, nothing to fetch |
 
 Standalone either one prints every payout either solver makes on Solana, narrowing to recipients
-given as arguments; [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) runs one of them beside the two
-chains and prints only the payouts whose order id matches a sell it has already seen, counting the
-rest.
+given as arguments; [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) runs one of them beside the
+other subjects and prints only the payouts whose id — Relay's order id or an intent id — matches a
+sell, or cash sent to Solana, that it sees on an EVM chain, counting the rest.
 
 Three facts are read differently over gRPC. A memo arrives as raw instruction data rather than as a
 parsed string, so the order id is decoded out of the bytes. Balances are protobuf fields rather than
