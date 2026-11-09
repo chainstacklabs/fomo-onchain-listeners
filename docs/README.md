@@ -2,7 +2,7 @@
 
 | Document | What it covers |
 |---|---|
-| [01 — How it works](01-how-it-works.md) | The architecture: who owns which contract, where the money lives across Solana and the six EVM chains, and what the chains do and do not reveal |
+| [01 — How it works](01-how-it-works.md) | The architecture: who owns which contract, where the money lives across Solana and the EVM chains, and what the chains do and do not reveal |
 | [02 — Trade lifecycle](02-trade-lifecycle.md) | What a buy and a sell actually do, from the tap to the last transaction, and who takes a cut of each |
 | [03 — Tokens and liquidity](03-tokens-and-liquidity.md) | Where the catalog comes from, what gates trading, and what the liquidity behind it is made of |
 | [04 — Listening](04-listening.md) | Which contracts and accounts to subscribe to on each chain, and how to decode what arrives |

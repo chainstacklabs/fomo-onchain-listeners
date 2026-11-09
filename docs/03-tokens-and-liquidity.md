@@ -20,9 +20,9 @@ liquidity, volume and price change over several windows, holder and transaction 
 the price is read from, social links, an origin block naming the launchpad and its bonding-curve
 progress, and safety flags including mint and freeze authorities.
 
-The catalog spans seven chains: Solana, Robinhood Chain, Base, Ethereum, BNB Smart Chain, Monad and
-Elysium, and every one of them carries FOMO trades. The app tells the server which of them its build
-understands; the server decides everything else.
+The catalog spans Solana, Robinhood Chain, Base, Ethereum, BNB Smart Chain, Monad and Elysium, and
+every one of them carries FOMO trades. The app tells the server which of them its build understands;
+the server decides everything else.
 
 ## Discovery is a server decision
 

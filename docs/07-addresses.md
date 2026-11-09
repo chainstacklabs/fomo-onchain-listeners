@@ -18,7 +18,7 @@ replaced a piece that has gone quiet.
 ## Every EVM chain — account layer and Relay
 
 These sit at the same address on Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad and
-Elysium, so one table serves all six.
+Elysium, so one table serves them all.
 
 | Address | What |
 |---|---|

@@ -1,9 +1,9 @@
 # How it works
 
 FOMO's onchain footprint is assembled from public standards and other parties' contracts, spread
-across seven chains that do two different jobs: Solana holds the cash, and the tokens live wherever
-they were issued — on Solana itself, or on one of six EVM chains: Robinhood Chain, BNB Smart Chain,
-Base, Ethereum, Monad and Elysium.
+across chains that do two different jobs: Solana holds the cash, and the tokens live wherever they
+were issued — on Solana itself, or on one of the EVM chains Robinhood Chain, BNB Smart Chain, Base,
+Ethereum, Monad and Elysium.
 
 ## What FOMO runs on
 
@@ -208,20 +208,20 @@ intent route's, and the pools are third-party deployments. FOMO is a tenant on e
 
 Read from the chains. Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad, Elysium and Solana
 mainnet, over Chainstack nodes. The addresses, topics, event signatures and decimals are
-[`registry.json`](../scripts/maintenance/registry.json), re-verified 2026-11-09 on all seven chains,
-Elysium included, by [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py). That the same
+[`registry.json`](../scripts/maintenance/registry.json), re-verified 2026-11-09 on every chain
+above, Elysium included, by
+[`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py). That the same
 contracts serve FOMO on the four chains beyond Robinhood Chain, that wallets recorded on Robinhood
 Chain carry the same delegation there, and that other applications share it was measured on
 2026-10-30 by [`maintenance/probe_chain.py`](../scripts/maintenance/probe_chain.py). The paymaster
-test was checked the same day against Relay's `referrer` field: of 16 deposits from wallets
-carrying the delegation on BNB Smart Chain and Base, the 8 with no paymaster were all FOMO's and the
-8 sponsored by one were all another application's. The Settler's share
-of the route was measured on 2026-09-08 over blocks 57993000–57993400, where it was a party to the
-token transfers in 70 of 221 bundles. Elysium was probed the same way on 2026-11-09, its launch
-day: every contract present, 171 of 172 senders through version 0.8 carrying the delegation, all of
-their operations submitted by the `0x4337…` fleet and none naming a paymaster. The intent route, its
-deployer and its creation dates were read the same day; [`05-crossing.md`](05-crossing.md) lists
-what.
+test was checked the same day against Relay's `referrer` field: of 16 deposits from wallets carrying
+the delegation on BNB Smart Chain and Base, the 8 with no paymaster were all FOMO's and the 8
+sponsored by one were all another application's. The Settler's share of the route was measured on
+2026-09-08 over blocks 57993000–57993400, where it was a party to the token transfers in 70 of 221
+bundles. Elysium was probed the same way on 2026-11-09, its launch day: every contract present, 171
+of 172 senders through version 0.8 carrying the delegation, all of their operations submitted by the
+`0x4337…` fleet and none naming a paymaster. The intent route, its deployer and its creation dates
+were read the same day; [`05-crossing.md`](05-crossing.md) lists what.
 
 From FOMO's app. The offchain hosts, which price is quoted and which route the server chooses, and
 that the server returns a ready-to-sign transaction — app traffic, iOS v1.87.1, captured

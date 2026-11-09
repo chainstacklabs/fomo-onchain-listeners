@@ -18,7 +18,7 @@
 
 FOMO is a cross-chain social trading app. Its onchain footprint is ERC-4337 wallets, two routes
 across chains — Relay's settlement contracts and a second route called here the intent route — and
-ordinary AMM pools, on Solana and six EVM chains: Robinhood Chain, BNB Smart Chain, Base, Ethereum,
+ordinary AMM pools, on Solana and the EVM chains Robinhood Chain, BNB Smart Chain, Base, Ethereum,
 Monad and Elysium. This repository maps that footprint and ships working listeners for the trade
 flow on every one of them.
 
