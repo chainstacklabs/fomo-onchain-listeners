@@ -840,6 +840,20 @@
       "memoProgram": "Memo4c2pN8afCj432Lb7RMVKi9PbQnnW7ewFFaV3oAH",
       "what": "The intent route's solver. A buy is a co-signed USDC transfer from the user to it with memo {\"intentId\":\"<id>\"}; a sell's proceeds come from it as USDC with the bare id in a memo. Both memos go through memoProgram, not the SPL memo programs.",
       "verifiedAt": "2026-11-09"
+    },
+    "outflows": {
+      "what": "USDC leaving a FOMO wallet by neither route: listeners report these as OUT, not as trades.",
+      "withdrawalCut": {
+        "address": "R4rNJHaffSUotNmqSKNEfDcJE8A7zJUkaoM5Jkd7cYX",
+        "what": "Paid exactly 0.20 USDC beside a co-signed withdrawal that creates the recipient's USDC account (30 of 30 on 2026-11-09). Also receives transfers FOMO does not co-sign."
+      },
+      "collector": {
+        "address": "4YdxBVxy5k5kWuBqhFFjR32PBNs1whkL6PQwitR2Va3Y",
+        "what": "Receives co-signed USDC payments with a 12-byte memo (24 hex) whose first 4 bytes are a unix time 2-20 s before the block; sweeps round sums to sweepTarget, fee paid by sweepFeePayer.",
+        "sweepTarget": "41zCUJsKk6cMB94DDtm99qWmyMZfp4GkAhhuz4xTwePu",
+        "sweepFeePayer": "7N3vzw6W4F9PZ7bePfXnhvwH6PAEE7XCpge899HLpQUY"
+      },
+      "verifiedAt": "2026-11-09"
     }
   },
   "evmChains": {

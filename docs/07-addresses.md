@@ -109,6 +109,8 @@ chain carries a decimals mismatch across the pair. Read `decimals()` per address
 | `F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe` | Relay's payout solver — pays a sell's proceeds out as USDC, from whichever EVM chain the sell ran on. Not FOMO's, and shared with every other application Relay settles here |
 | `oMcssxWxgooErb8bsRA4QN34VHhvfeEbdDjrwF6WH45` | the intent route's solver — receives a buy's USDC and pays a sell's USDC out, the intent id in a memo beside each |
 | `Memo4c2pN8afCj432Lb7RMVKi9PbQnnW7ewFFaV3oAH` | the memo program the intent route writes its ids through — not one of the SPL memo programs |
+| `R4rNJHaffSUotNmqSKNEfDcJE8A7zJUkaoM5Jkd7cYX` | paid exactly 0.20 USDC beside a withdrawal that creates the recipient's USDC account. Also paid by transfers FOMO does not co-sign |
+| `4YdxBVxy5k5kWuBqhFFjR32PBNs1whkL6PQwitR2Va3Y` | collects USDC payments carrying a 12-byte, time-stamped memo and sweeps them to `41zCUJsKk6cMB94DDtm99qWmyMZfp4GkAhhuz4xTwePu`. Not a trade by either route |
 | `99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2` | Relay's deposit program |
 | `7uTT8Xi5RWXzy7h9XL244GRgEycDYDhLjr3ZyNdXi8pZ` | Relay vault authority |
 | `Dodg2HifwU8rmaVVyMyUZDGTRbqAJTyVYxXPwcbNpBKc` | Relay program config account |

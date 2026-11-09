@@ -229,6 +229,15 @@ Classify by what the wallet's own accounts gained and lost, then read the progra
 | one asset out and another in, neither route | a trade that stays on Solana |
 | one side only | funds moving in or out of the wallet |
 
+An `OUT` of USDC is cash leaving FOMO rather than a trade, by neither route, and two shapes of it
+recur. A withdrawal to an address with no USDC account yet creates that account and pays exactly
+0.20 USDC to `R4rNJHaffSUotNmqSKNEfDcJE8A7zJUkaoM5Jkd7cYX` beside the amount sent; that address also
+receives transfers FOMO does not co-sign, so it is not FOMO's alone. A payment to
+`4YdxBVxy5k5kWuBqhFFjR32PBNs1whkL6PQwitR2Va3Y` carries a 12-byte memo, written as 24 hex characters,
+whose first four bytes are a unix time a few seconds before the payment's block; that account sweeps
+what it collects to `41zCUJsKk6cMB94DDtm99qWmyMZfp4GkAhhuz4xTwePu` in round sums. Neither names its
+purpose onchain, so both stay `OUT`; what they pay for is out of scope.
+
 > [!WARNING]
 > Do not key a swap on a single router program. FOMO routes same-chain trades through at least
 > three: DFlow, Jupiter, and a third program with no public name. A classifier keyed on DFlow alone
@@ -458,7 +467,12 @@ disagreement. The intent route's memo program was read off the intent solver's o
 the same day, and the two relayers and their two call shapes off the sender and selector of every
 fill over 20 to 40 minutes on the same three chains. On Elysium [`maintenance/probe_chain.py`](../scripts/maintenance/probe_chain.py) found every
 contract present, 171 of 172 senders through version 0.8 carrying the delegation, every one of
-their operations submitted by the `0x4337…` fleet and none naming a paymaster.
+their operations submitted by the `0x4337…` fleet and none naming a paymaster. All 135 `OUT` rows in
+the ten-minute recording were read back the same day: 84 single transfers, 30 withdrawals that
+created the recipient's USDC account and paid 0.20 USDC to `R4rNJHaf…`, and 21 payments to
+`4YdxBVxy…` whose memo time preceded the block by 2 to 20 seconds. Of the last 40 transactions
+naming `R4rNJHaf…`, 34 were not co-signed by FOMO, and `4YdxBVxy…`'s own transactions were sweeps of
+5,000 and 6,000 USDC to `41zCUJsK…`, their fee paid by `7N3vzw6W…`.
 
 From FOMO's app and Relay's API. That Relay tags FOMO's requests with `referrer: fomo`, read from
 `api.relay.link` on 2026-08-31. Nothing in this document decodes from it.
