@@ -6,18 +6,21 @@ produces which is a fact about how FOMO uses that chain: Solana holds the cash, 
 chains hold the tokens, and only the EVM chain a token lives on names it at the moment it
 is bought.
 
-  BUY      EVM    a token arrived from Relay's executor. The first moment that token is
-                  public, and the only event that ever names it
-  SELL     EVM    a token left a wallet and the proceeds landed in Relay's depository
-  PAY      any    cash into Relay: somebody is buying something. The deposit carries an
-                  amount and an order id and never the token, so it gives you the size
-                  and the wallet, never what was bought
+  BUY      EVM    a token delivered by one of the two routes across chains: out of
+                  Relay's executor, or by the intent route's relayer. The first moment
+                  that token is public, and the only event that ever names it
+  SELL     EVM    a token left a wallet and the proceeds went into a route: Relay's
+                  depository, or the intent route's contract
+  PAY      any    cash into a route with nothing sold beside it: somebody is buying
+                  something, or moving cash to Solana. It carries an amount and an id and
+                  never the token, so it gives you the size and the wallet, never what was
+                  bought
   SWAP     SOL    a trade that stayed on one chain: the wallet gave one asset and
-                  received another, with Relay absent
+                  received another, with neither route involved
   IN/OUT   SOL    a plain token movement into or out of a wallet
-  FILL     SOL    Relay paying out a sell made on another chain, from 05. Its recipient
-                  and order id are readable; which application it belongs to is not, so
-                  only a feed watching both chains can call one of these FOMO's
+  FILL     SOL    a solver paying out a sell made on another chain, from 05. Its recipient
+                  and id are readable; which application it belongs to is not, so only a
+                  feed watching both chains can call one of these FOMO's
   OTHER    SOL    received but not classifiable: nothing the wallet owns changed, so
                   there is no amount to read and no side to take. Emitted with its
                   signature rather than dropped, because a feed that quietly omits a
@@ -68,7 +71,7 @@ class Trade(NamedTuple):
     note: str = ""  # the venue or router the trade ran through
     where: str = ""  # the block on an EVM chain, the slot on Solana
     key: str = ""  # what identifies this trade on this chain
-    order_id: str = ""  # the Relay order id, the key that joins a trade's two legs
+    order_id: str = ""  # Relay's order id or the intent id: the key that joins a trade's two legs
 
 
 # What a row says when the chain did not say it. Both chains use the same words, so

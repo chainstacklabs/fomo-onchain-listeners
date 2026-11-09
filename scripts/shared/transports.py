@@ -42,8 +42,8 @@ def evm_transports(network, chain):
             module="01_listen_evm_logs",
             chain=chain.code,
             needs=needs,
-            what="6 log filters, FOMO only",
-            summary="eth_subscribe logs, nothing polled or fetched. Standard WSS.",
+            what="7 log filters, FOMO only",
+            summary="eth_subscribe logs; a receipt fetched per intent-route trade. Standard WSS.",
             network=network,
         ),
         f"{network}-blocks": Transport(
@@ -77,15 +77,15 @@ TRANSPORTS = {
         module="05_listen_relay_payouts_blocks",
         chain="SOL",
         needs=("SOLANA_MAINNET_WSS",),
-        what="Relay's payout solver, whole blocks",
-        summary="Relay's payout solver over blockSubscribe. Settles sells; other applications are counted.",
+        what="both payout solvers, whole blocks",
+        summary="Both payout solvers over blockSubscribe. Settles sells; other applications are counted.",
     ),
     "payouts-grpc": Transport(
         module="06_listen_relay_payouts_grpc",
         chain="SOL",
         needs=("GEYSER_ENDPOINT", "GEYSER_API_TOKEN"),
-        what="Relay's payout solver, whole transactions",
-        summary="Relay's payout solver over Yellowstone gRPC. Needs a paid Geyser endpoint.",
+        what="both payout solvers, whole transactions",
+        summary="Both payout solvers over Yellowstone gRPC. Needs a paid Geyser endpoint.",
     ),
 }
 
@@ -93,8 +93,8 @@ TRANSPORTS = {
 # read as shorthand.
 CHAIN_NAME = {chain.code: chain.name for chain in CHAINS.values()} | {"SOL": "Solana"}
 
-# Two transports per subject: FOMO on each EVM chain, FOMO on Solana, and Relay's payout
-# solver on Solana. Each is read through two pipes, so picking between the pipes on one
+# Two transports per subject: FOMO on each EVM chain, FOMO on Solana, and the payout
+# solvers on Solana. Each is read through two pipes, so picking between the pipes on one
 # subject is a question about an endpoint. The payout pair is prefixed for its subject
 # rather than for its chain, because what separates it from `sol-grpc` and `sol-blocks` is
 # not the chain — it is that it keys on the solver instead of on FOMO.

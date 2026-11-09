@@ -31,7 +31,7 @@ round trips. A load-balanced endpoint can answer a range short when its end is p
 answering backend's head (docs/04-listening.md, Transports), so a miss re-reads the head and
 sweeps the tail again before reporting nothing.
 
-Reference: docs/04-listening.md (Joining the two legs), docs/05-relay.md (Following one order).
+Reference: docs/04-listening.md (Joining the two legs), docs/05-crossing.md (Following one order).
 
 A `handleOps` bundle carries several users, so a transaction holding more than one deposit
 names a transaction and not a trade: the first is followed and the count is printed.

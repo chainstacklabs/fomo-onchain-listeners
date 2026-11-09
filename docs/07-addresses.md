@@ -4,7 +4,8 @@ Every address the listeners and the docs rely on, per chain and per layer. The m
 copy is [`../scripts/maintenance/registry.json`](../scripts/maintenance/registry.json), and
 [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py) re-reads it against
 the live chains whose endpoints are set: Robinhood Chain in depth, every other EVM chain for the
-contracts and cash below, and Solana. A chain without its endpoint is skipped and named. Relay's own chain has a separate RPC and is not covered.
+contracts and cash below, and Solana. A chain without its endpoint is skipped and named. Relay's
+own chain has a separate RPC and is not covered.
 
 To look one up by eye: [robinscan.io](https://robinscan.io) for Robinhood Chain,
 [bscscan.com](https://bscscan.com), [basescan.org](https://basescan.org),
@@ -16,8 +17,8 @@ replaced a piece that has gone quiet.
 
 ## Every EVM chain — account layer and Relay
 
-These sit at the same address on Robinhood Chain, BNB Smart Chain, Base, Ethereum and Monad, so
-one table serves all five.
+These sit at the same address on Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad and
+Elysium, so one table serves all six.
 
 | Address | What |
 |---|---|
@@ -39,6 +40,26 @@ An operation sponsored by a paymaster is not FOMO's, whatever its sender's code.
 seen on the chains other applications share, `0x8888888888…`, sponsors fun.xyz and tria
 deposits; [`04-listening.md`](04-listening.md) has the rule.
 
+## The intent route
+
+FOMO's second route across chains, described in [`05-crossing.md`](05-crossing.md). The contract
+and the relayers are at one address on every chain the route is deployed on: BNB Smart Chain,
+Robinhood Chain, Base and Elysium. Ethereum and Monad have neither.
+
+| Address | What |
+|---|---|
+| `0xa834e70303322d86e5dae95ee47e9c6a073d9812` | the intent contract — an ERC-1967 proxy, a different implementation on each chain. Emits the intent id beside every trade |
+| `0x9a3811b1afeadf2800b499eb234a7ab8f366dfbf` | a relayer — an EOA that sends fills |
+| `0xe950337f36e45c316c53c69a5f285487b54f0bad` | the other relayer — an EOA; the two send every fill between them |
+| `0xc39f7e7ea5f6b65a384e76cc6225f9b5a872fbc5` | the router on Elysium |
+| `0x0005ea38eb0a69d1253508ebdbdb9ea8cb26b5ef` | the router on Robinhood Chain and Base |
+| `0x0005ea70fa6dbd2efd17697d2351301adb6318b2` | the router on BNB Smart Chain |
+| `0x9fc4e320a181e88644a302d11f1f158ef0699e37` | paid in the native asset beside every fill; a 171-byte contract on every chain but Elysium, where it has no code |
+| `0x0d231a9a7bca60a33783fb8459cede96440e0a7d` | the EOA that created the intent contract on each chain |
+
+The implementation behind the proxy on each chain is in
+[`registry.json`](../scripts/maintenance/registry.json) under `intentLayer.intentRoute`.
+
 ## Every EVM chain — what differs
 
 | Chain | Chain id | Native asset | Cash a sell is paid in |
@@ -48,6 +69,7 @@ deposits; [`04-listening.md`](04-listening.md) has the rule.
 | Base | 8453 | ETH | USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, 6 decimals |
 | Ethereum | 1 | ETH | USDC `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` and USDT `0xdAC17F958D2ee523a2206206994597C13D831ec7`, 6 decimals |
 | Monad | 143 | MON | USDC `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` and USDT0 `0xe7cd86e13AC4309349F30B3435a9d337750fC82D`, 6 decimals |
+| Elysium | 99901 | HYPE | USDC `0xb47c4c8f73f009cc0c0d3f92b388d13e293f0b65`, 6 decimals |
 
 The same symbol carries eighteen decimals on BNB Smart Chain and six everywhere else. Read
 `decimals()` per address, never per symbol.
@@ -85,6 +107,8 @@ chain carries a decimals mismatch across the pair. Read `decimals()` per address
 |---|---|
 | `AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51` | FOMO's co-signer — signs and pays for every transaction FOMO sends. The marker on this chain |
 | `F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe` | Relay's payout solver — pays a sell's proceeds out as USDC, from whichever EVM chain the sell ran on. Not FOMO's, and shared with every other application Relay settles here |
+| `oMcssxWxgooErb8bsRA4QN34VHhvfeEbdDjrwF6WH45` | the intent route's solver — receives a buy's USDC and pays a sell's USDC out, the intent id in a memo beside each |
+| `Memo4c2pN8afCj432Lb7RMVKi9PbQnnW7ewFFaV3oAH` | the memo program the intent route writes its ids through — not one of the SPL memo programs |
 | `99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2` | Relay's deposit program |
 | `7uTT8Xi5RWXzy7h9XL244GRgEycDYDhLjr3ZyNdXi8pZ` | Relay vault authority |
 | `Dodg2HifwU8rmaVVyMyUZDGTRbqAJTyVYxXPwcbNpBKc` | Relay program config account |
@@ -122,12 +146,15 @@ Chain id 537713, RPC `https://rpc.chain.relay.link` and `wss://rpc.chain.relay.l
 
 ## Where this comes from
 
-Read from the chains. Every address here was re-verified on 2026-10-30 by
+Read from the chains. Every address here was re-verified on 2026-11-09 by
 [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py) against Robinhood
-Chain, BNB Smart Chain, Base, Ethereum, Monad and Solana mainnet — code present where code is
-expected, EOAs still EOAs, every recorded event still firing at its address on Robinhood Chain,
-every recorded topic still the keccak of the signature beside it, and every cash token at the
-symbol and decimals above. The cash on each chain was read off the deposits made by wallets
+Chain, BNB Smart Chain, Base, Ethereum, Monad, Elysium and Solana mainnet — code present where code
+is expected, EOAs still EOAs, every recorded event still firing at its address on Robinhood Chain,
+every recorded topic still the keccak of the signature beside it where a signature is recorded,
+and every cash token at the symbol and decimals above. Elysium's cash was read off 303 deposits
+made by wallets carrying FOMO's delegation over about 20 minutes on 2026-11-09, all of them USDC.
+The intent route's addresses — the contract's code and implementation on each chain, the relayers,
+the routers named in fills, the creator in each creation transaction — were read the same day. The cash on each chain was read off the deposits made by wallets
 carrying FOMO's delegation on 2026-10-30, and the paymaster `0x8888888888…` was tied to fun.xyz and
 tria by the `referrer` on the Relay records of the deposits it sponsored.
 

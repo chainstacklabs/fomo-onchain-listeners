@@ -11,6 +11,11 @@ shared/solana.py from what the wallet's balances did. FOMO routes swaps through 
 one program — DFlow, Jupiter and a third, unnamed router have all been seen — so a swap is
 recognised by what moved rather than by the program called, and the router is reported.
 
+A payment is cash leaving for another chain, by either of FOMO's two routes: a deposit into
+Relay's program, which names its order id in the instruction, or a USDC transfer to the
+intent solver with the intent id in a memo. Either id is what joins the payment to the
+buy it pays for.
+
 Closing a wrapped-SOL account refunds its rent to the wallet, which shows up as a few
 thousandths of a SOL next to the real trade; SOL movements that small are ignored whenever
 anything else moved.
@@ -33,7 +38,17 @@ import base58
 import websockets
 from shared import cli, env
 from shared.feed import Trade
-from shared.solana import CO_SIGNER, DEPOSIT_DISCRIMINATOR, MAX_FRAME_BYTES, RELAY_DEPOSIT, block_subscription, classify
+from shared.solana import (
+    CO_SIGNER,
+    DEPOSIT_DISCRIMINATOR,
+    INTENT_SOLVER,
+    MAX_FRAME_BYTES,
+    MEMO_PROGRAMS,
+    RELAY_DEPOSIT,
+    block_subscription,
+    classify,
+    payment_id,
+)
 
 WEBSOCKET = env.optional("SOLANA_MAINNET_WSS")
 
@@ -99,6 +114,15 @@ async def listen(deadline, watched, emit, counts):
                 before, after = amounts(meta.get("preTokenBalances", [])), amounts(meta.get("postTokenBalances", []))
                 seen = meta.get("preTokenBalances", []) + meta.get("postTokenBalances", [])
                 owners = {(b["accountIndex"], b["mint"]): b.get("owner") for b in seen}
+                # The other route: USDC to the intent solver, the id in a memo. The solver
+                # itself need not be among the keys, only its token account, so its
+                # ownership of a balance is the test.
+                intent = ""
+                if INTENT_SOLVER in owners.values():
+                    for instruction in transaction["message"]["instructions"]:
+                        note = instruction.get("parsed")
+                        if instruction.get("programId") in MEMO_PROGRAMS and isinstance(note, str):
+                            intent = payment_id(note) or intent
                 moved = []
                 for account in set(before) | set(after):
                     if owners.get(account) != user:
@@ -116,8 +140,9 @@ async def listen(deadline, watched, emit, counts):
                         if abs(lamports) > 1e-9:
                             moved.append((lamports, "SOL"))
 
-                relay = RELAY_DEPOSIT in programs or RELAY_DEPOSIT in every
-                kind, gave, got, note = classify(moved, programs, relay)
+                paid = RELAY_DEPOSIT in programs or RELAY_DEPOSIT in every or bool(intent)
+                kind, gave, got, note = classify(moved, programs, paid)
+                order = order or intent
                 counts[kind] += 1
                 signature = entry["transaction"]["signatures"][0]
                 emit(Trade(kind, gave, got, user, "fomo", note, f"slot {value.get('slot')}", signature, order))

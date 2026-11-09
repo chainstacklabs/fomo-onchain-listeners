@@ -28,7 +28,7 @@ which is why none of them belongs in docs/ without that said out loud.
 Addresses, topics and program ids come from maintenance/registry.json and shared/ rather
 than from copies kept here, so verify_registry.py covers what this reads.
 
-Reference: docs/05-relay.md, docs/04-listening.md (Telling FOMO apart from everything else).
+Reference: docs/05-crossing.md, docs/04-listening.md (Telling FOMO apart from everything else).
 
     uv run scripts/maintenance/relay_share.py [minutes]      default 15
 """

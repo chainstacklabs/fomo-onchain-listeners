@@ -9,18 +9,21 @@ Every kind reaches this feed — BUY, SELL and PAY off each EVM chain, SWAP, PAY
 OTHER off Solana. shared/feed.py defines what each one means.
 
 Every chain runs in one process, so the halves of a cross-chain buy can be put back
-together: the Solana payment carries the Relay order id, and the solver's fill on the EVM
-chain ends its calldata with the same id. A filled buy prints with the payment that bought
-it and how long it took, off the chains themselves, with no Relay API. The EVM listeners
-are told which order ids FOMO's co-signer paid for, so a token delivered to a wallet that
-has never operated on that chain, and so carries no delegation there yet, is still named.
+together. FOMO crosses by two routes, and each writes one id on both chains: Relay's order
+id, which the Solana payment carries and the solver's fill on the EVM chain ends its
+calldata with, and the intent route's id, which the Solana payment carries in a memo and
+the route's contract emits beside the fill. A filled buy prints with the payment that
+bought it and how long it took, off the chains themselves, with no API. The EVM listeners
+are told which ids FOMO's co-signer paid for, so a token delivered to a wallet that has
+never operated on that chain, and so carries no delegation there yet, is still named.
 
 A sell joins the same way, from the other direction. Its payout on Solana is signed
-by a Relay solver rather than by FOMO's co-signer, so it arrives over a third
-subscription keyed on that solver, carrying the order id in a memo. That stream is
-every application Relay settles on Solana, not FOMO's alone, and nothing in a payout
-says which application it belongs to — a payout is named here only when its order id
-matches a sell this run sees on an EVM chain, before or after it. The rest are counted.
+by a solver rather than by FOMO's co-signer — Relay's or the intent route's — so it
+arrives over a third subscription keyed on both solvers, carrying the id in a memo. That
+stream is every application the two solvers settle on Solana, not FOMO's alone, and
+nothing in a payout says which application it belongs to — a payout is named here only
+when its id matches a sell this run sees on an EVM chain, before or after it. The rest
+are counted.
 
 One transport per subject, named to override the default. The defaults are the three that
 run on an ordinary endpoint; a default whose endpoint is missing from .env exits saying
@@ -28,13 +31,13 @@ which variable it wants, rather than listening over something else or dropping t
 Which transport is faster or more complete is a property of your endpoint, so measure
 yours with maintenance/compare_listeners.py.
 
-One subject per EVM chain, plus FOMO on Solana and Relay's payouts, two pipes each,
-either/or. Relay's payouts are a subject rather than a third choice of Solana pipe: they
-key on the solver rather than on FOMO. Every EVM chain is on by default, so a chain whose
+One subject per EVM chain, plus FOMO on Solana and the solvers' payouts, two pipes each,
+either/or. The payouts are a subject rather than a third choice of Solana pipe: they key
+on the solvers rather than on FOMO. Every EVM chain is on by default, so a chain whose
 endpoint is missing exits naming the variable rather than leaving a hole in the feed; turn
 one off by name. Each takes the same three, shown here for Robinhood Chain:
 
-  rh-logs         six eth_subscribe log filters; nothing polled or fetched  [default]
+  rh-logs         seven eth_subscribe log filters; few lookups              [default]
   rh-blocks       newHeads plus per-block eth_getLogs; groups a block together
   rh-off          leave Robinhood Chain out
 
@@ -42,17 +45,17 @@ one off by name. Each takes the same three, shown here for Robinhood Chain:
   sol-blocks      blockSubscribe over a standard WSS; no paid add-on        [default]
   sol-off         leave Solana out
 
-  payouts-blocks  Relay's payout solver over blockSubscribe                 [default]
-  payouts-grpc    the same solver over Yellowstone gRPC; needs Geyser
-  payouts-off     leave the payouts out; a sell then ends at the deposit into Relay
+  payouts-blocks  both payout solvers over blockSubscribe                  [default]
+  payouts-grpc    the same solvers over Yellowstone gRPC; needs Geyser
+  payouts-off     leave the payouts out; a sell then ends where it left its chain
 
 FOMO is one tenant of Relay's contracts on every EVM chain, so rows from there are the
 wallets carrying FOMO's delegation, plus the deliveries whose order FOMO paid for on
-Solana. Solana has no such marker, and everything reached through FOMO's co-signer is
-FOMO's. Wallet arguments filter by user: a 0x address filters every EVM chain, because a
-FOMO wallet has the same address on all of them, and a base58 one filters Solana. A chain
-given no wallet keeps streaming every FOMO trade. One user is two addresses, so watching a
-person means passing both.
+Solana; the intent route's trades are held to the same test. Solana has no such marker,
+and everything reached through FOMO's co-signer is FOMO's. Wallet arguments filter by
+user: a 0x address filters every EVM chain, because a FOMO wallet has the same address on
+all of them, and a base58 one filters Solana. A chain given no wallet keeps streaming every
+FOMO trade. One user is two addresses, so watching a person means passing both.
 
 This decodes nothing itself. It imports `listen()` from 01 through 06, so a
 decoding rule lives in exactly one place, and it is the only script here that imports
@@ -148,7 +151,7 @@ async def main():
     if solana == "sol-off":
         print(f"{'sol-off':<15} Solana is off, so payments and Solana-native swaps are invisible")
     if payouts == "payouts-off":
-        print(f"{'payouts-off':<15} payouts are off, so a sell ends at the deposit into Relay")
+        print(f"{'payouts-off':<15} payouts are off, so a sell ends where it left its chain")
     # A wallet filters the chains its address belongs to and no other. A user's EVM
     # address and their Solana address are unrelated, so passing one leaves the other
     # side streaming every FOMO trade — which reads as a filter that did nothing. Print
@@ -175,7 +178,7 @@ async def main():
         for key in [k for k, (_, at) in held.items() if time.time() - at > JOIN_WINDOW]:
             del held[key]
             if held is payouts:
-                joins["Relay payouts for other applications"] += 1
+                joins["payouts for other applications"] += 1
 
     def settles(leg, gap):
         """The line under a payout: what it settles, and when the other half went past.
@@ -210,8 +213,8 @@ async def main():
             elif trade.order_id and chain != "SOL" and trade.kind == "SELL":
                 remember(sold, trade)
             elif trade.kind == "FILL":
-                # This stream carries every application Relay settles on Solana, and a
-                # payout says nothing about which. Only one whose order id matches a sell or
+                # This stream carries every application the solvers settle on Solana, and
+                # a payout says nothing about which. Only one whose order id matches a sell or
                 # a payment seen here can be called FOMO's. One that arrives first is held
                 # for it, and whatever is still unmatched when it expires is counted.
                 # A payment held here may be Solana's own, which a payout never settles: only a
@@ -252,7 +255,7 @@ async def main():
     if sold:
         joins["sells with no payout seen"] += len(sold)
     if payouts:
-        joins["Relay payouts for other applications"] += len(payouts)
+        joins["payouts for other applications"] += len(payouts)
     merged = Counter(joins)
     # Keyed by transport, not by chain: `sol-blocks` and `payouts-blocks` both count
     # blocks, over different account filters, and one line adding the two together says

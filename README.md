@@ -16,10 +16,11 @@
 
 > **Experimental.** A reference implementation, not for production use.
 
-FOMO is a cross-chain social trading app that deploys no contracts. Its onchain footprint is
-ERC-4337 wallets, Relay's settlement contracts and ordinary AMM pools, on Solana and five EVM
-chains: Robinhood Chain, BNB Smart Chain, Base, Ethereum and Monad. This repository maps that
-footprint and ships working listeners for the trade flow on every one of them.
+FOMO is a cross-chain social trading app. Its onchain footprint is ERC-4337 wallets, two routes
+across chains — Relay's settlement contracts and a second route called here the intent route — and
+ordinary AMM pools, on Solana and six EVM chains: Robinhood Chain, BNB Smart Chain, Base, Ethereum,
+Monad and Elysium. This repository maps that footprint and ships working listeners for the trade
+flow on every one of them.
 
 ## Quickstart
 
@@ -55,8 +56,8 @@ FOMO composes four public building blocks and runs its own servers on top:
 | Layer | What it is | Who runs it |
 |---|---|---|
 | Wallets | [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) accounts carrying an [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) delegation, one address on every EVM chain; plain keypairs on Solana | public standards |
-| Crossing | Relay, a settlement protocol that takes payment on one chain and delivers on another | Relay |
-| Routing | Relay's router and executor, at the same addresses on every EVM chain; an aggregator program for a Solana same-chain swap | Relay and solvers, Solana aggregators |
+| Crossing | Relay, a settlement protocol that takes payment on one chain and delivers on another; and the intent route, which does the same through a contract of its own and a solver on Solana | Relay; the intent route's operator, out of scope here |
+| Routing | Relay's router and executor, at the same addresses on every EVM chain, or the intent route's router; an aggregator program for a Solana same-chain swap | Relay and solvers, the intent route, Solana aggregators |
 | Venues | Uniswap V4, V3 and V2 and PancakeSwap's pools on the EVM chains, Aerodrome on Base; Raydium, Meteora, Orca, and PumpSwap on Solana | third parties |
 | Product | the token list, the quoted price, the chosen route, the fees, the social graph | FOMO |
 
@@ -66,15 +67,17 @@ that through in detail, starting at [`docs/01-how-it-works.md`](docs/01-how-it-w
 
 The cash sits on Solana as USDC in the user's own wallet, and a token stays on the chain that
 issued it, so most trades cross: Solana is the hub, and every EVM chain is a spoke. A crossing
-trade lands as two transactions carrying one 32-byte
-[Relay](https://docs.relay.link/references/protocol/overview) order id, and that id is what joins
-them with no help from FOMO's servers.
+trade lands as two transactions carrying one id — a 32-byte
+[Relay](https://docs.relay.link/references/protocol/overview) order id, or the intent route's
+intent id — and that id is what joins them with no help from FOMO's servers. Both routes carry
+FOMO's trades at the same time; [`docs/05-crossing.md`](docs/05-crossing.md) sets them side by
+side.
 
-Both directions are filled by a solver fronting the far side out of its own capital, and the two
-legs are not equally visible. A buy's payment on Solana names an amount and an order id but never
+Both directions are filled by somebody fronting the far side out of their own inventory, and the
+two legs are not equally visible. A buy's payment on Solana names an amount and an order id but never
 the token, so the token first appears when the solver delivers it. A sell reverses that: the user's
 own operation is fully readable, while the payout arrives on Solana as a plain USDC transfer signed
-by the solver, calling no Relay program and emitting no event. Nothing about that payout says FOMO,
+by a solver, calling no program of its route and emitting no event. Nothing about that payout says FOMO,
 so it takes its own subscription and counts as FOMO's only when its order id matches a sell seen on
 an EVM chain.
 
@@ -95,15 +98,15 @@ chain whose endpoint is set.
 | Script | Chain | What lands in the feed | Transport |
 |---|---|---|---|
 | [`00_listen_fomo.py`](scripts/00_listen_fomo.py) | all | Every kind below, in one stream, with the two halves of a crossing trade joined as they arrive | any of the below |
-| [`01_listen_evm_logs.py`](scripts/01_listen_evm_logs.py) | one EVM chain, named first | `BUY` a token delivered by a solver — the one moment a bought token is named; `SELL` a token swapped and handed to Relay; `PAY` cash into Relay | `eth_subscribe` logs |
+| [`01_listen_evm_logs.py`](scripts/01_listen_evm_logs.py) | one EVM chain, named first | `BUY` a token delivered by a solver or the intent route's relayer — the one moment a bought token is named; `SELL` a token swapped and handed to a route; `PAY` cash into a route | `eth_subscribe` logs |
 | [`02_listen_evm_blocks.py`](scripts/02_listen_evm_blocks.py) | one EVM chain, named first | The same `BUY`, `SELL` and `PAY`, arriving a whole block at a time | `newHeads` + `eth_getLogs` |
 | [`03_listen_solana_grpc.py`](scripts/03_listen_solana_grpc.py) | Solana | `SWAP` a trade that never leaves Solana, both sides named; `PAY` the cash leg of a buy landing elsewhere; `IN`/`OUT` a plain token movement | Yellowstone gRPC |
 | [`04_listen_solana_blocks.py`](scripts/04_listen_solana_blocks.py) | Solana | The same `SWAP`, `PAY`, `IN` and `OUT` | `blockSubscribe` |
-| [`05_listen_relay_payouts_blocks.py`](scripts/05_listen_relay_payouts_blocks.py) | Solana | `FILL` Relay paying out on Solana — a sell made on an EVM chain, or cash moving to Solana | `blockSubscribe` |
+| [`05_listen_relay_payouts_blocks.py`](scripts/05_listen_relay_payouts_blocks.py) | Solana | `FILL` a solver — Relay's or the intent route's — paying out on Solana: a sell made on an EVM chain, or cash moving to Solana | `blockSubscribe` |
 | [`06_listen_relay_payouts_grpc.py`](scripts/06_listen_relay_payouts_grpc.py) | Solana | The same `FILL`, one commitment earlier | Yellowstone gRPC |
 
 The EVM chains are `rh` for Robinhood Chain, `bsc` for BNB Smart Chain, `base`, `eth` for Ethereum,
-and `monad`, each one row of [`scripts/shared/evm.py`](scripts/shared/evm.py):
+`monad`, and `elysium`, each one row of [`scripts/shared/evm.py`](scripts/shared/evm.py):
 
 ```bash
 uv run scripts/01_listen_evm_logs.py bsc 60
@@ -132,7 +135,7 @@ of them is needed to run a listener.
 
 These names are arguments to `00_listen_fomo.py` only. Scripts `01`–`06` take none of them,
 because each one *is* a single transport. `00` has one slot per **subject**: FOMO on each EVM
-chain, FOMO on Solana, and Relay's payout solver. Each subject is read through one of two pipes, or
+chain, FOMO on Solana, and the two payout solvers. Each subject is read through one of two pipes, or
 switched off.
 
 Both pipes onto an EVM chain carry the same trades, so picking between them is a question about
@@ -141,7 +144,7 @@ here for BNB Smart Chain:
 
 | Each EVM chain | What you get | Commitment | What it costs |
 |---|---|---|---|
-| `bsc-logs` *(default)* | Every event pushed as its block is published, nothing polled or fetched | the chain's head | A standard WebSocket endpoint |
+| `bsc-logs` *(default)* | Every event pushed as its block is published; one receipt fetched per intent-route trade | the chain's head | A standard WebSocket endpoint |
 | `bsc-blocks` | The same trades grouped per block, and the same code points at history | the chain's head | A few round trips per sweep |
 | `bsc-off` | Nothing, and so no buy delivered there is ever named | | |
 
@@ -155,15 +158,15 @@ Same again on Solana:
 
 The last slot is the payouts, and it is a subject rather than a third choice of Solana pipe. The
 pipes above each read FOMO's own transactions, keyed on the delegation or the co-signer. These two
-key on Relay's payout solver instead, so they deliver *different rows*: the far leg of a sell, which
-no FOMO-keyed subscription can reach. Most of what they carry belongs to other applications and is
+key on the two payout solvers instead, Relay's and the intent route's, so they deliver *different
+rows*: the far leg of a sell, which no FOMO-keyed subscription can reach. Most of what they carry belongs to other applications and is
 counted rather than printed.
 
-| Relay's payouts | What you get | Commitment | What it costs |
+| The payouts | What you get | Commitment | What it costs |
 |---|---|---|---|
-| `payouts-blocks` *(default)* | Every payout the solver signs, a block at a time | `confirmed` | A second Solana WebSocket subscription |
+| `payouts-blocks` *(default)* | Every payout either solver signs, a block at a time | `confirmed` | Two more Solana WebSocket subscriptions, one per solver |
 | `payouts-grpc` | The same payouts, pushed one transaction at a time | `processed` | A Geyser endpoint, and a second stream on it |
-| `payouts-off` | Nothing, and a sell then ends at the deposit into Relay | | |
+| `payouts-off` | Nothing, and a sell then ends where it left its chain | | |
 
 Each slot has a default, so a command names only what it changes:
 
@@ -172,7 +175,7 @@ uv run scripts/00_listen_fomo.py 60                                # every defau
 uv run scripts/00_listen_fomo.py 60 sol-grpc payouts-grpc          # Geyser where it helps
 uv run scripts/00_listen_fomo.py 60 bsc-blocks base-blocks         # a block's events must arrive together
 uv run scripts/00_listen_fomo.py 60 eth-off monad-off              # leave two chains out
-uv run scripts/00_listen_fomo.py 60 rh-off bsc-off base-off eth-off monad-off  # Solana alone, nothing is ever named
+uv run scripts/00_listen_fomo.py 60 rh-off bsc-off base-off eth-off monad-off elysium-off  # Solana alone
 ```
 
 Which of two pipes serves you better is a property of your endpoint rather than of this code, so
@@ -192,7 +195,7 @@ tells FOMO apart from every other tenant of the same contracts, are worked throu
 
 [Chainstack](https://chainstack.com) serves every chain here with WebSocket endpoints:
 [Robinhood Chain](https://docs.chainstack.com/reference/robinhood-getting-started), BNB Smart Chain,
-Base, Ethereum, Monad and Solana mainnet. Solana also offers the
+Base, Ethereum, Monad, Elysium and Solana mainnet. Solana also offers the
 [Yellowstone gRPC Geyser plugin](https://docs.chainstack.com/docs/yellowstone-grpc-geyser-plugin).
 
 Robinhood Chain is an

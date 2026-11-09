@@ -12,6 +12,7 @@ Reference: docs/04-listening.md (Solana), docs/01-how-it-works.md (Solana holds 
 """
 
 import json
+import re
 
 from shared.feed import NOTHING_MOVED, UNNAMED
 
@@ -37,7 +38,44 @@ NATIVE_DEPOSIT_DISCRIMINATOR = bytes.fromhex("0d9e0ddf5fd51c06")
 # signs that transfer rather than FOMO, so the co-signer is not in it and no listener
 # above ever receives it. The order id travels in a memo.
 SETTLEMENT_SOLVER = "F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe"
-MEMO_PROGRAMS = {"MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr", "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo"}
+# The two SPL memo programs, and a third the intent route writes its ids through. A memo
+# sent through a program missing here is never read, and its payment reads as an OUT.
+MEMO_PROGRAMS = {
+    "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+    "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo",
+    "Memo4c2pN8afCj432Lb7RMVKi9PbQnnW7ewFFaV3oAH",
+}
+
+# FOMO's second route across chains, and since October 2026 the one most of its cross-chain
+# trades take. No program is called on this side: a buy is a plain USDC transfer to this
+# solver, co-signed by FOMO, with `{"intentId":"<id>"}` in a memo; a sell's proceeds come back
+# from the same solver with the bare id in a memo. The id is the same string the route's
+# contract emits on the EVM chain, so it joins the two legs the way a Relay order id does.
+INTENT_SOLVER = "oMcssxWxgooErb8bsRA4QN34VHhvfeEbdDjrwF6WH45"
+INTENT_ID = re.compile(r"[0-9a-f]{7}-[0-9a-f]{7}-[0-9a-f]{3}")
+# Both solvers sign their own payouts; `05` and `06` read the two of them.
+SOLVERS = (SETTLEMENT_SOLVER, INTENT_SOLVER)
+
+
+def payment_id(note):
+    """The intent id a buy payment's memo carries, or "" for any other memo."""
+    try:
+        value = json.loads(note).get("intentId", "")
+    except Exception:
+        return ""
+    return value if isinstance(value, str) and INTENT_ID.fullmatch(value) else ""
+
+
+def payout_id(note):
+    """The id a solver's payout memo carries: Relay's 32-byte order id, or an intent id.
+
+    Shape is the test. A Relay payout's other memo is a nonce that begins with the unix
+    time, and neither shape matches it.
+    """
+    if note.startswith("0x") and len(note) == 66:
+        return note.lower()
+    return note if INTENT_ID.fullmatch(note) else ""
+
 
 ROUTERS = {
     "DF1ow4tspfHX9JwWJsAb9epbkA8hmpSEAtxXy1V27QBH": "DFlow",
@@ -69,12 +107,13 @@ def mint_name(address):
     return "SOL" if address == "SOL" else KNOWN.get(address, address)
 
 
-def classify(moved, programs, relay):
+def classify(moved, programs, paid):
     """(kind, gave, got, note) from what the wallet's own accounts gained and lost.
 
     A wrapped-SOL account being closed refunds its rent, so a SOL movement smaller
-    than that is dropped whenever anything else moved. Relay wins over everything:
-    a deposit is a payment even though the wallet also gave an asset.
+    than that is dropped whenever anything else moved. `paid` wins over everything: a
+    Relay deposit or an intent payment is a payment even though the wallet also gave
+    an asset.
     """
     if len(moved) > 1:
         moved = [m for m in moved if m[1] not in ("SOL", WSOL) or abs(m[0]) >= SOL_DUST]
@@ -85,7 +124,7 @@ def classify(moved, programs, relay):
     moved.sort(key=lambda m: -abs(m[0]))
     gave = [m for m in moved if m[0] < 0]
     got = [m for m in moved if m[0] > 0]
-    if relay:
+    if paid:
         return "PAY", (f"{-gave[0][0]:.6f} {mint_name(gave[0][1])}" if gave else "?"), UNNAMED, ""
     if gave and got:
         router = "+".join(ROUTERS.get(p, p[:6] + "…") for p in sorted(programs - PLUMBING)) or "?"
@@ -99,18 +138,19 @@ def classify(moved, programs, relay):
     return "OTHER", "", NOTHING_MOVED, ""
 
 
-def block_subscription(account):
+def block_subscription(account, request=1):
     """The `blockSubscribe` request for whole transactions mentioning `account`.
 
     `04` and `05` differ in which account they watch and in what they do with what comes
     back, and in nothing else about the subscription itself. The request is a value, so
     it lives here; opening the socket and reading from it stays in each listener, where
-    what to do with a block is decided.
+    what to do with a block is decided. The filter takes one account, so `05` sends one
+    request per solver on the same socket, and `request` tells their replies apart.
     """
     return json.dumps(
         {
             "jsonrpc": "2.0",
-            "id": 1,
+            "id": request,
             "method": "blockSubscribe",
             "params": [
                 {"mentionsAccountOrProgram": account},

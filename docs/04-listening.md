@@ -11,22 +11,25 @@ vantage point gives, and the decoding rules that keep a listener honest.
 | Where the swap runs | inside the user's own operation | inside a solver's transaction, later | inside the user's own transaction |
 | What the first event says | token, venue, both amounts | that someone paid, and how much | token, venue, both amounts |
 | When the token is named | at execution | only at the fill | at execution |
-| Who signs the last leg | a Relay solver, on Solana | a Relay solver, on the EVM chain | the user |
-| What that leg costs to see | a second subscription, on the solver | nothing — it runs through a contract | nothing |
+| Who signs the last leg | a solver, on Solana | a solver or a relayer, on the EVM chain | the user |
+| What that leg costs to see | a second subscription, on the solvers | nothing — it runs through a contract | nothing |
 
-Relay fills on the destination chain, and FOMO trades in both directions, so every crossing trade
-has a solver's leg. The two are not equally visible. A buy fills on its EVM chain through Relay's
-executor, a fixed contract emitting a `Transfer`, so watching the contract catches it. A sell fills
-on Solana as a bare `spl-token` transfer with a memo — no program, no event — and the only account
-that identifies it is the solver's own. On an EVM chain the subscriptions are on contracts and see
-both sides; on Solana the subscription is on a signer and sees only what FOMO signs.
+FOMO crosses by two routes, Relay and the intent route, and both deliver on the destination chain,
+so every crossing trade has a solver's leg. The two directions are not equally visible. A buy is
+delivered on its EVM chain through a fixed contract — Relay's executor, or the intent route's
+contract — so watching the contract catches it. A sell is paid out on Solana as a bare
+`spl-token` transfer with a memo — no program, no event — and the only account that identifies it
+is the solver's own. On an EVM chain the subscriptions are on contracts and see both sides; on
+Solana the subscription is on a signer and sees only what FOMO signs.
+[`05-crossing.md`](05-crossing.md) describes both routes.
 
-Every EVM chain FOMO trades on — Robinhood Chain, BNB Smart Chain, Base, Ethereum and Monad — runs
-the same contracts at the same addresses, so everything below under **EVM chains** holds on each of
-them, and one listener reads any of them with the chain named.
+Every EVM chain FOMO trades on — Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad and
+Elysium — runs Relay's contracts and the account layer at the same addresses, and the intent route's
+contract is at one address on the four of them it is deployed on, so everything below under **EVM
+chains** holds on each of them, and one listener reads any of them with the chain named.
 
-The deposit that pays for a crossing buy carries an amount and an opaque identifier. Nothing public
-names the token before the fill — not the origin chain, and not
+The payment for a crossing buy carries an amount and an opaque identifier, by either route. Nothing
+public names the token before the fill — not the origin chain, and not
 [Relay](https://docs.relay.link/references/protocol/overview)'s settlement chain. A crossing buy
 becomes readable at the moment it is already done. A buy that stays on Solana has no deposit and no
 order id: it is one swap, and it names both sides as it executes.
@@ -49,10 +52,10 @@ count of fill *events* says a small minority, because the executor's own routing
 on both sides of the hops that reach the user. Say which one a number is.
 
 The implementation FOMO's wallets run is the reference `Simple7702Account`, deployed at one address
-on every chain, so the delegation names FOMO only where nobody else uses it. On the other four
-chains other applications do, and their operations come through the same bundler fleet. What
-separates them is who pays: FOMO's bundler absorbs the gas and a FOMO operation names no paymaster,
-while the other applications sponsor theirs through one, named in topic 3 of
+on every chain, so the delegation names FOMO only where nobody else uses it. On BNB Smart Chain,
+Base, Ethereum and Monad other applications do, and their operations come through the same bundler
+fleet. What separates them is who pays: FOMO's bundler absorbs the gas and a FOMO operation names no
+paymaster, while the other applications sponsor theirs through one, named in topic 3 of
 `UserOperationEvent`. A deposit is FOMO's when its depositor carries the delegation **and** the
 depositor's own operation names no paymaster. A deposit from a sponsored operation is another
 application's, counted and left out of the feed.
@@ -69,10 +72,14 @@ payment the Solana leg has not decoded yet.
 Both tests describe the applications seen sharing the delegation, which all use a paymaster. One
 that pays its own gas on the same delegation would pass them, and none has been seen.
 
+The intent route is held to the same tests: a send into its contract is FOMO's when the sender
+carries the delegation and its operation names no paymaster, and a fill is FOMO's when the buyer
+carries the delegation or is a plain address whose intent id a FOMO payment on Solana claims.
+
 | Chain | Marker |
 |---|---|
 | Robinhood Chain | the wallet's code is the EIP-7702 delegation every FOMO wallet carries |
-| BNB Smart Chain, Base, Ethereum, Monad | the same delegation, and no paymaster on the depositor's operation; for a buy, the delegation, or the order id of a FOMO payment on Solana |
+| BNB Smart Chain, Base, Ethereum, Monad, Elysium | the same delegation, and no paymaster on the depositor's or sender's operation; for a buy, the delegation, or the order id or intent id of a FOMO payment on Solana |
 | Solana | the co-signer that signs and pays for every FOMO transaction |
 | Relay's API | the `referrer` field on each request record; keyless only until 2026-11-24, when `/requests/v2` is sunset |
 | Relay's chain | none — solvers and assets are visible, the application behind an order is not |
@@ -91,7 +98,7 @@ every chain, so the wallet code test, and the paymaster test, apply there too. O
 the operations contract are deployed and carry other traffic entirely, so subscribing to the wrong
 address yields nothing useful.
 
-### The four things to subscribe to
+### The five things to subscribe to
 
 **Everything FOMO does.** The operations contract's `UserOperationEvent`, with the sender at
 `topic[2]`.
@@ -110,6 +117,14 @@ same transaction, and the order id from the router's calldata.
 > October 2026, and the first pair still carries every earlier trade and other Relay traffic. A
 > filter on one executor sees no buys and no sells on the other: the deposits still arrive and read
 > as payments. Both pairs are in [`07-addresses.md`](07-addresses.md).
+
+**The intent route.** Every log of its contract, `0xa834e703…9812`. Each trade opens with an id
+event carrying the intent id; a fill event is a buy, and a send event is a sell or cash leaving for
+Solana. Neither names the token or the buyer, so read the transaction's receipt: a buy's token is
+the last `Transfer` into the buyer, whom word 2 of the relayer's call names in either of its two
+shapes, and a sell's token is the first `Transfer` out of the sender inside its own operation. A
+send with nothing sold before it is a payment. Two further events fire on the contract and are not
+trades.
 
 **Buy payments.** Deposits into Relay's depository name the payer and the amount but never the
 destination. There are two deposit events, one per asset kind, and they are the same trade: watching
@@ -148,6 +163,9 @@ bundle's raw calldata matches inside other users' operations too.
 | Relay depository | `RelayErc20Deposit` | a buy payment *and* a sell's proceeds — separate them by span |
 | Relay depository | `RelayNativeDeposit` | the same, paid in the chain's native asset. One word shorter: amount at word 1, order id at word 2 |
 | any ERC-20 | `Transfer` | a buy fill when the sender is Relay's executor |
+| intent contract | id, `0x74647a56…` | opens every intent-route trade; the intent id, ASCII in one word |
+| intent contract | send, `0xfe501452…` | the native asset leaving for Solana; sender at `topic[2]`, the amount at word 3 |
+| intent contract | fill, `0x7af24e5c…` | a buy delivered; names the router, never the buyer |
 
 Topics for each of these are in
 [`../scripts/maintenance/registry.json`](../scripts/maintenance/registry.json), and
@@ -179,11 +197,13 @@ wallet is an ordinary keypair.
 same-chain trades together, because both are transactions FOMO signed. Ask for whole transactions
 rather than logs: the classification below reads balances, and a log line does not carry them.
 
-**Sell payouts.** Whole transactions mentioning Relay's settlement solver,
-`F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe`. The co-signer's filter cannot reach these — see
-below — and this one is not a FOMO feed, so a payout is FOMO's only by its order id.
+**Sell payouts.** Whole transactions mentioning either solver: Relay's,
+`F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe`, and the intent route's,
+`oMcssxWxgooErb8bsRA4QN34VHhvfeEbdDjrwF6WH45`. The co-signer's filter cannot reach these — see
+below — and this one is not a FOMO feed, so a payout is FOMO's only by its id. `blockSubscribe`
+takes one account, so it is two subscriptions on one socket; gRPC takes both in one.
 
-Both are the same subscription shape, differing only in the account named, and both are reachable
+Both are the same subscription shape, differing only in the accounts named, and both are reachable
 over either Solana transport: `mentionsAccountOrProgram` on `blockSubscribe` and `account_include`
 on Yellowstone gRPC match an account anywhere in a transaction, signer or not.
 [`shared/solana.py`](../scripts/shared/solana.py) builds the WebSocket request for
@@ -205,7 +225,8 @@ Classify by what the wallet's own accounts gained and lost, then read the progra
 | What moved | Meaning |
 |---|---|
 | cash into Relay's deposit program | a cross-chain buy or withdrawal being paid for; the instruction carries an amount and an order id, never the token |
-| one asset out and another in, no Relay | a trade that stays on Solana |
+| USDC to the intent solver, with `{"intentId":"<id>"}` in a memo | the same, by the intent route; the memo carries the id, never the token |
+| one asset out and another in, neither route | a trade that stays on Solana |
 | one side only | funds moving in or out of the wallet |
 
 > [!WARNING]
@@ -221,21 +242,22 @@ Two instructions have to be decoded by hand; everything else is read from balanc
 | Where | What to read | Layout |
 |---|---|---|
 | Relay's deposit program, `99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2` | a crossing buy being paid for | 48 bytes: an 8-byte discriminator `0b9c60da27a3b413`, a u64 amount little-endian at 8, the 32-byte order id at 16. Nothing follows |
-| the memo programs beside a solver's transfer | which sell a payout settles | two memos: the 32-byte order id as hex, and a unix timestamp. The order id is the one that joins |
+| the memo programs beside a solver's transfer | which sell a payout settles | from Relay's solver, two memos: the 32-byte order id as hex, and a unix timestamp. The order id is the one that joins |
+| `Memo4c2pN8afCj432Lb7RMVKi9PbQnnW7ewFFaV3oAH` beside an intent transfer | which trade it pays for or settles | one memo: `{"intentId":"<id>"}` on a buy payment, the bare id on a payout. This program is not an SPL memo program, and a decoder that knows only those never reads it |
 
 A payout itself needs no instruction decoding: it is a plain `spl-token` transfer, not
 `transferChecked`, so the instruction names no mint. Read the mint from the source token account
 instead, and the recipient from the balance that grew.
 
-One thing the co-signer does not cover: the payout of a sell executed on an EVM chain. A Relay
-solver signs and pays for that transfer, FOMO's co-signer appears nowhere in it, and a
-subscription filtered on the co-signer therefore never receives it. That payout has its own
-subscription, keyed on the solver —
+One thing the co-signer does not cover: the payout of a sell executed on an EVM chain. A solver
+signs and pays for that transfer, FOMO's co-signer appears nowhere in it, and a subscription
+filtered on the co-signer therefore never receives it. That payout has its own subscription, keyed
+on the two solvers —
 [`05_listen_relay_payouts_blocks.py`](../scripts/05_listen_relay_payouts_blocks.py) over
 WebSocket, [`06_listen_relay_payouts_grpc.py`](../scripts/06_listen_relay_payouts_grpc.py) over
-gRPC — and it is not a FOMO feed: the solver serves every application and every origin chain Relay
-settles from. Nothing in a payout names an application, so one is FOMO's only when its order id
-matches a sell, or a stablecoin deposit, seen on an EVM chain.
+gRPC — and it is not a FOMO feed: Relay's solver serves every application and every origin chain
+Relay settles from. Nothing in a payout names an application, so one is FOMO's only when its id
+matches a sell, or cash sent to Solana, seen on an EVM chain.
 
 Closing a wrapped-SOL account refunds its rent, about 0.002 SOL, to the wallet, and that refund
 lands in the same balance delta as the trade itself. Taken at face value it becomes the token
@@ -255,10 +277,9 @@ the feed to specific users.
 
 Every subscription above arrives over one of two pipes, and the pipes differ in what they carry and
 in how they fail. The subsections below are what `00` names on the command line: each EVM chain is
-`<chain>-logs` or `<chain>-blocks` — `rh`, `bsc`, `base`, `eth`, `monad` — Solana is `sol-grpc` or
-`sol-blocks`, and Relay's payouts is
-`payouts-blocks` or `payouts-grpc` — a third subject rather than a third Solana pipe, because it
-reads the solver, not FOMO.
+`<chain>-logs` or `<chain>-blocks` — `rh`, `bsc`, `base`, `eth`, `monad`, `elysium` — Solana is
+`sol-grpc` or `sol-blocks`, and the payouts are `payouts-blocks` or `payouts-grpc` — a third
+subject rather than a third Solana pipe, because it reads the solvers, not FOMO.
 
 Raise the WebSocket frame limit on any of them. A busy log subscription on Robinhood Chain and a
 Solana subscription carrying full transactions both send frames past the 1 MiB default of most
@@ -273,15 +294,16 @@ arrive together, or when the same code has to read past blocks.
 | Behavior | [`01_listen_evm_logs.py`](../scripts/01_listen_evm_logs.py) | [`02_listen_evm_blocks.py`](../scripts/02_listen_evm_blocks.py) |
 |---|---|---|
 | Shape | log subscriptions | heads, then a sweep per block |
-| Subscribes to | six `eth_subscribe` log filters on one socket | `newHeads` |
+| Subscribes to | seven `eth_subscribe` log filters on one socket | `newHeads` |
 | Logs arrive | pushed as each block is published | fetched per block with `eth_getLogs` |
 | Ordering | filters are unordered against each other, so a fill waits for a later block's log before it is classified | a block arrives complete |
 | Past blocks | no | yes, the sweep takes any range |
-| Falls behind | never, nothing is fetched to keep up | one HTTP round trip per sweep |
+| Falls behind | never; the lookups run off a queue, beside the socket | a few HTTP round trips per sweep |
 
-Both resolve a token's symbol and decimals and read a wallet's delegation over HTTP. The log
+Both resolve a token's symbol and decimals and read a wallet's delegation over HTTP, and both
+fetch the receipt of every intent-route trade, plus the relayer's call for a fill. The log
 listener does it off a queue, so a slow lookup never stalls the socket; the sweeping one folds
-those calls into the sweep.
+those calls into the sweep, one more round trip when the sweep holds an intent-route trade.
 
 The sweeping listener loses ground whenever a sweep takes longer than the blocks it covers, and on
 Robinhood Chain blocks arrive about every tenth of a second. Past 300 blocks it stops trying to
@@ -302,17 +324,18 @@ Two transports for FOMO's own transactions, in order of what they deliver:
 | [`03_listen_solana_grpc.py`](../scripts/03_listen_solana_grpc.py) | Yellowstone gRPC, a paid add-on | the whole transaction, pushed, nothing to fetch |
 | [`04_listen_solana_blocks.py`](../scripts/04_listen_solana_blocks.py) | `blockSubscribe`, on a standard endpoint | the whole transaction, once the block is assembled |
 
-### Relay's payouts
+### The payouts
 
-Two transports again, over the same pair of pipes as FOMO's own transactions:
+Two transports again, over the same pair of pipes as FOMO's own transactions, each reading both
+solvers:
 
 | Script | Transport | What arrives |
 |---|---|---|
 | [`05_listen_relay_payouts_blocks.py`](../scripts/05_listen_relay_payouts_blocks.py) | `blockSubscribe`, on a standard endpoint | the whole transaction, once the block is assembled |
 | [`06_listen_relay_payouts_grpc.py`](../scripts/06_listen_relay_payouts_grpc.py) | Yellowstone gRPC, a paid add-on | the whole transaction, pushed, nothing to fetch |
 
-Standalone either one prints every Relay payout on Solana, narrowing to recipients given as
-arguments; [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) runs one of them beside the two
+Standalone either one prints every payout either solver makes on Solana, narrowing to recipients
+given as arguments; [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) runs one of them beside the two
 chains and prints only the payouts whose order id matches a sell it has already seen, counting the
 rest.
 
@@ -332,7 +355,7 @@ read lamport gains when no token moved: those payouts are somebody else's sell, 
 uncounted makes the solver look quieter than it is.
 
 A rotated solver address makes this stream go quiet rather than wrong, so a run reporting sells and
-no payouts means the address, not the market. `maintenance/verify_registry.py` checks it, and
+no payouts means an address, not the market. `maintenance/verify_registry.py` checks it, and
 `00_listen_fomo.py` prints `sells with no payout seen` for the same reason.
 
 ### Measuring your own endpoints
@@ -349,14 +372,17 @@ that chain caught and it did not. Run it against your own endpoints before commi
 
 ## Joining the two legs
 
-The order id is written on both chains, so nothing else is needed. It sits somewhere different in
-each direction, and in each direction one half is the user's transaction and the other is a solver's:
+Each route writes one id on both chains — Relay its order id, the intent route its intent id — so
+nothing else is needed. It sits somewhere different in each direction, and in each direction one
+half is the user's transaction and the other is a solver's:
 
-| Direction | EVM chain | Solana |
-|---|---|---|
-| Buy | solver's fill — the last 32 bytes of the call to Relay's router | user's payment — bytes 16 to 48 of the Relay deposit instruction, after the discriminator and the amount |
-| Sell | user's deposit — the last word of the depository log | solver's payout — an `spl-memo` carrying the id |
-| Cash moving to Solana | user's deposit — the last word of the depository log | solver's payout — an `spl-memo` carrying the id |
+| Route | Direction | EVM chain | Solana |
+|---|---|---|---|
+| Relay | Buy | solver's fill — the last 32 bytes of the call to Relay's router | user's payment — bytes 16 to 48 of the Relay deposit instruction, after the discriminator and the amount |
+| Relay | Sell | user's deposit — the last word of the depository log | solver's payout — an `spl-memo` carrying the id |
+| Relay | Cash moving to Solana | user's deposit — the last word of the depository log | solver's payout — an `spl-memo` carrying the id |
+| intent | Buy | relayer's fill — the id event in the same transaction | user's payment — the memo `{"intentId":"<id>"}` |
+| intent | Sell, or cash moving to Solana | user's send — the id event in the same transaction | solver's payout — the bare id in a memo |
 
 Read those last 32 bytes only when the transaction's `to` is Relay's router. Executor `Transfer`s
 also appear inside `handleOps` bundles, where the end of the calldata is unrelated data.
@@ -364,17 +390,19 @@ also appear inside `handleOps` bundles, where the end of the calldata is unrelat
 A sell's payout is reachable only by going to the solver. It is a plain `spl-token` transfer of
 USDC into the seller's token account, so `getSignaturesForAddress` on the seller's wallet does not
 list it either — an SPL transfer names the token account, and `getTokenAccountsByOwner` is what
-turns a wallet into one. The solver's address is in
-[`registry.json`](../scripts/maintenance/registry.json) under `solana.settlement`; Relay's solvers
-rotate the way this chain's bundlers do, so re-check it rather than building an allowlist on it.
+turns a wallet into one. The solvers' addresses are in
+[`registry.json`](../scripts/maintenance/registry.json) under `solana.settlement` and
+`solana.intent`; Relay's solvers rotate the way this chain's bundlers do, so re-check them rather
+than building an allowlist on them.
 The second memo a payout carries is a nonce whose first characters spell the unix time, not an
 application tag: there is nothing on this side to attribute with.
 
-That makes the join local and free, in both directions: hold recent deposits by order id and match
-each fill against them. [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) does exactly that while
+That makes the join local and free, in both directions and by either route: hold recent payments by
+id and match each fill against them. [`00_listen_fomo.py`](../scripts/00_listen_fomo.py) does exactly that while
 every chain is streaming, printing a filled buy together with the payment that bought it, and a
 payout together with the sell it settles or the cash it moved.
-[`07_trace_trade.py`](../scripts/07_trace_trade.py) does it after the fact in either direction,
+[`07_trace_trade.py`](../scripts/07_trace_trade.py) does it after the fact in either direction for
+Relay's trades — the intent route's are out of its scope —
 taking a transaction hash, a Solana signature or an order id and printing both legs — for a sell it
 reads the solver's own recent transactions, since nothing indexes a memo. For a wallet rather than
 one trade, [`08_wallet.py`](../scripts/08_wallet.py) reads its past on one EVM chain, and
@@ -418,6 +446,18 @@ The two payout transports were measured against each other on 2026-09-09, over 1
 Solana slots 445622460–445622934: both decoded the same 1,143 payouts, agreeing on kind, recipient,
 amount and order id for every one, with gRPC ahead by a median of 0.33 s. 159 of those payouts were
 native SOL rather than a token.
+
+The intent route and Elysium were added on 2026-11-09, Elysium's launch day. A ten-minute recording
+of Robinhood Chain, BNB Smart Chain, Elysium and Solana that day held 710 FOMO payments on Solana
+through the intent route and 239 through Relay; on the three EVM chains, 631 buys and 262 sells
+through the intent route and 51 buys and 52 sells through Relay. 891 intent ids joined a Solana leg
+to an EVM leg in the same run. Both EVM transports then agreed on every trade on Robinhood Chain,
+BNB Smart Chain and Elysium over 120 seconds, 155 trades with none missed and no classification
+disagreement. The intent route's memo program was read off the intent solver's own transactions
+the same day, and the two relayers and their two call shapes off the sender and selector of every
+fill over 20 to 40 minutes on the same three chains. On Elysium [`maintenance/probe_chain.py`](../scripts/maintenance/probe_chain.py) found every
+contract present, 171 of 172 senders through version 0.8 carrying the delegation, every one of
+their operations submitted by the `0x4337…` fleet and none naming a paymaster.
 
 From FOMO's app and Relay's API. That Relay tags FOMO's requests with `referrer: fomo`, read from
 `api.relay.link` on 2026-08-31. Nothing in this document decodes from it.

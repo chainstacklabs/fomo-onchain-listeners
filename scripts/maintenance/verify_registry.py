@@ -7,15 +7,16 @@ keyed on a dead address simply goes silent and looks like a quiet market.
 
 This re-reads the registry's contracts, venues, event topics and token decimals against
 the live chain and prints PASS or FAIL per claim: the account, intent and aggregation
-contracts still have code, the EOAs among them are still EOAs, every venue factory and the
-V4 pool manager and both non-AMM venues are alive, USDG really is 6 decimals, each
-registered event still fires, and the wallet fingerprint still separates a FOMO wallet from
-a lookalike and still matches the one shared/evm.py hands the listeners. Then every other
-EVM chain in shared/evm.py's table whose endpoint is set: the right chain id, the shared
-contracts present, and its cash at the symbol and scale `evmChains` records. The market
-survey and offchain sections are descriptive and are not checked. Set SOLANA_MAINNET_HTTPS
-and the Solana entries are checked too: the co-signer is still busy and every router FOMO
-uses is still an executable program.
+contracts still have code — Relay's and the intent route's both — the EOAs among them are
+still EOAs, every venue factory and the V4 pool manager and both non-AMM venues are alive,
+USDG really is 6 decimals, each registered event still fires, and the wallet fingerprint
+still separates a FOMO wallet from a lookalike and still matches the one shared/evm.py hands
+the listeners. Then every other EVM chain in shared/evm.py's table whose endpoint is set:
+the right chain id, the shared contracts present, the intent route where `evmChains` says
+it is deployed, and its cash at the symbol and scale `evmChains` records. The market survey
+and offchain sections are descriptive and are not checked. Set SOLANA_MAINNET_HTTPS and the
+Solana entries are checked too: the co-signer is still busy, every router FOMO uses
+is still an executable program, and both solvers are still paying out with memos.
 
 A failure means the registry is stale, not that the chain is broken. Fix the file, using
 event_inventory.py to find what replaced the missing piece.
@@ -41,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared import env
 from shared.evm import CHAINS, DEPOSITORY, ENTRYPOINT, EXECUTORS, FOMO_CODE, FOMO_IMPLEMENTATION, ROUTERS
-from shared.solana import TX_VERSION
+from shared.solana import MEMO_PROGRAMS, TX_VERSION
 
 w3 = Web3(Web3.HTTPProvider(env.endpoint("ROBINHOOD_MAINNET_HTTPS")))
 # Read up front, so a missing variable stops the run before it prints half a report.
@@ -113,7 +114,7 @@ print("\n-- every topic is the keccak of the signature recorded beside it --")
 # A recorded topic and a recorded signature can disagree, and nothing else notices: the
 # listeners match on the topic and never hash the ABI, so a wrong signature stays correct
 # in every run and burns whoever derives their own filter from this file.
-signatures = {t: m["abi"] for t, m in reg["events"].items() if "abi" in m}
+signatures = {t: m["abi"] for t, m in reg["events"].items() if isinstance(m, dict) and "abi" in m}
 signatures |= {t: v.split(" - ")[0] for t, v in reg["venues"]["swapEventShapes"].items()}
 for topic, abi in signatures.items():
     computed = w3.keccak(text=abi).hex()
@@ -123,7 +124,7 @@ for topic, abi in signatures.items():
 print("\n-- every registered event actually fires --")
 contracts = {"entryPoint": reg["accountLayer"]["entryPoint"]} | {
     name: reg["intentLayer"][name]
-    for name in ("relayDepository", "relayRouter", "relayExecutor", "relayRouterV1", "relayExecutorV1")
+    for name in ("relayDepository", "relayRouter", "relayExecutor", "relayRouterV1", "relayExecutorV1", "intentRoute")
 }
 # Some events fire every few blocks and some a few times an hour, so a fixed window reports
 # the rare ones as gone. The search walks back one chunk at a time, small enough for a
@@ -131,13 +132,15 @@ contracts = {"entryPoint": reg["accountLayer"]["entryPoint"]} | {
 CHUNK, CHUNKS = 3000, 100
 head = w3.eth.block_number
 for topic, meta in reg["events"].items():
+    if topic.startswith("_"):
+        continue
     at = meta["at"].split(",")[0].strip()
     if at not in contracts:
         # Two different reasons to skip, and calling both "any-address" hides one: an
         # event recorded against another chain is not checkable here at all, while a
         # Transfer has no single address to look it up at.
         why = f"on {meta['chain']}, not this chain" if meta.get("chain") else "any-address event"
-        print(f"  SKIP  {meta.get('abi', '?')[:44]} ({why})")
+        print(f"  SKIP  {(meta.get('abi') or meta.get('label', '?'))[:44]} ({why})")
         continue
     address = Web3.to_checksum_address(contracts[at]["address"])
     found = False
@@ -146,7 +149,8 @@ for topic, meta in reg["events"].items():
         if w3.eth.get_logs(window | {"address": address, "topics": [topic]}):
             found = True
             break
-    check(f"{at}: {meta.get('abi', '?')[:46]}", found, f"no occurrences in {CHUNK * CHUNKS} blocks")
+    name = meta.get("abi") or meta.get("label", "?")
+    check(f"{at}: {name[:46]}", found, f"no occurrences in {CHUNK * CHUNKS} blocks")
 
 print("\n-- FOMO wallet fingerprint discriminates --")
 recorded = reg["accountLayer"]["fomoWalletFingerprint"]["test"].split("== ")[1]
@@ -188,6 +192,11 @@ for network, chain in CHAINS.items():
     for name, address in shared_contracts.items():
         size = len(here.eth.get_code(Web3.to_checksum_address(address)))
         check(f"{network}: {name} has code", size > 0, f"codesize={size}")
+    # The intent route is deployed on some of these chains and not others, and a chain the
+    # registry says has it is a chain whose listeners read its events.
+    if recorded.get("intentRoute"):
+        size = len(here.eth.get_code(Web3.to_checksum_address(reg["intentLayer"]["intentRoute"]["address"])))
+        check(f"{network}: intent route has code", size > 0, f"codesize={size}")
     for cash in recorded["cash"]:
         token = here.eth.contract(address=Web3.to_checksum_address(cash["address"]), abi=erc20)
         live = (token.functions.symbol().call(), token.functions.decimals().call())
@@ -241,6 +250,25 @@ else:
         memos >= 4,
         f"{memos} of the last 8 carried a memo — solvers rotate, re-verify the address",
     )
+    # The intent route's solver, the same claim: still signing transfers whose memo goes
+    # through the route's own memo program, which shared/solana.py has to know to read it.
+    intent = sol["intent"]
+    signed = [s["signature"] for s in solana("getSignaturesForAddress", [intent["solver"], {"limit": 40}]) or []]
+    memos = 0
+    for signature in signed[:12]:
+        tx = solana(
+            "getTransaction", [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": TX_VERSION}]
+        )
+        if not tx:
+            continue
+        programs = {i.get("programId") for i in tx["transaction"]["message"]["instructions"]}
+        memos += intent["memoProgram"] in programs
+    check(
+        "the intent solver is still moving USDC with memos",
+        memos >= 4,
+        f"{memos} of the last 12 carried one — re-verify the address",
+    )
+    check("shared/solana.py reads the intent memo program", intent["memoProgram"] in MEMO_PROGRAMS)
 
 print(f"\n{ok} passed, {bad} failed")
 raise SystemExit(1 if bad else 0)
