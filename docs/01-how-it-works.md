@@ -88,14 +88,14 @@ fee, names no paymaster, and the bundler absorbs the real cost, so FOMO wallets 
 chain's native asset.
 
 The borrowed contract is a public reference deployed at one address on every chain, so the pointer
-alone names FOMO only where FOMO is its only tenant. On Robinhood Chain it is. On the other four
-chains, other applications delegate to the same contract and run their operations through the same
+alone names FOMO only where FOMO is its only tenant. On Robinhood Chain and Elysium it is. On BNB
+Smart Chain, Base, Ethereum and Monad, other applications delegate to the same contract and run their operations through the same
 bundlers, but they pay through a **paymaster** — a contract that sponsors the gas and is named in
 the log line of every operation it pays for. A FOMO operation names none. The delegation plus the
 absence of a paymaster is the test on every EVM chain.
 
-Every one of those requests passes through a single contract, and that contract is what makes this
-chain readable. The standard calls it the EntryPoint; this reference calls it the **operations
+Every one of those requests passes through a single contract, and that contract is what makes each
+EVM chain readable. The standard calls it the EntryPoint; this reference calls it the **operations
 contract**. A bundler hands it a batch of signed requests; it checks each signature, calls the
 wallet that signed, and writes one log line per operation carrying that wallet's address and its
 paymaster; one batch holds many operations, each closed by its own line. Nothing a FOMO wallet does
@@ -109,7 +109,7 @@ them live at once. FOMO uses **version 0.8** and nothing else — the version th
 delegation its wallets carry. The older versions carry other applications' traffic, so a listener
 pointed at the wrong address sees none of FOMO.
 
-Two consequences for anyone reading this chain:
+Two consequences for anyone reading these chains:
 
 - **Bundlers are not an identifier.** There are dozens, all vanity-prefixed, and the set rotates.
   Off Robinhood Chain the same fleet submits other applications' operations too. An allowlist of

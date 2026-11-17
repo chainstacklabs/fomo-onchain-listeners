@@ -7,10 +7,12 @@ wallet worth a closer look, or to check that an address is FOMO's at all before 
 anything around it.
 
 A FOMO wallet is an ordinary address carrying one specific EIP-7702 delegation, and that
-code is the only reliable marker: bundler addresses rotate, and `getNonce()` on the account
-always reads zero because FOMO derives a fresh nonce namespace per operation. Every FOMO
-operation arrives as `executeBatch`, the wrapper the wallet runs, so that is what the
-operation column names; pass a transaction to 09_split_bundle.py to see the calls inside
+code is the marker: bundler addresses rotate, and `getNonce()` on the account always reads
+zero because FOMO derives a fresh nonce namespace per operation. On BNB Smart Chain, Base,
+Ethereum and Monad other applications delegate to the same implementation, and they sponsor
+their operations through a paymaster, so an operation naming one is counted apart as not
+FOMO's. Every FOMO operation arrives as `executeBatch`, the wrapper the wallet runs, so that
+is what the operation column names; pass a transaction to 09_split_bundle.py to see the calls inside
 one, and which logs in a shared bundle belong to this wallet.
 
 One EVM chain at a time, named first, so the address is a 0x one. A FOMO wallet has the
@@ -88,7 +90,7 @@ print(f"balance  {w3.eth.get_balance(who) / 1e18:.9f} {here.native}")
 if code == "0x":
     print("type     plain address, no code")
 elif code == FOMO_CODE:
-    print("type     FOMO wallet — carries the EIP-7702 delegation FOMO uses")
+    print("type     carries the EIP-7702 delegation FOMO uses; FOMO's when its operations name no paymaster")
 elif code.startswith(DELEGATION):
     print(f"type     EIP-7702 delegation to 0x{code[len(DELEGATION) :]} — not FOMO's")
 else:
@@ -106,8 +108,14 @@ def erc20(address, field, kind):
 
 print(f"\n-- FOMO operations, blocks {lo}-{head} --")
 ops = logs({"address": ENTRYPOINT, "topics": [USEROP, None, "0x" + "0" * 24 + who[2:].lower()]})
+# Topic 3 is the paymaster. FOMO's bundler pays the gas, so a FOMO operation names none; one
+# that does is another application sharing the delegation, and is counted rather than listed.
+sponsored = [log for log in ops if int(log["topics"][3].hex(), 16)]
+ops = [log for log in ops if not int(log["topics"][3].hex(), 16)]
 if not ops:
     print("  none in this window")
+if sponsored:
+    print(f"  {len(sponsored)} operation(s) naming a paymaster, so another application's, left out")
 for log in ops:
     data = log["data"].hex().replace("0x", "")
     nonce, success, cost = (int(data[i * 64 : (i + 1) * 64], 16) for i in range(3))

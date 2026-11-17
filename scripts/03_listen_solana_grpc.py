@@ -53,7 +53,7 @@ async def listen(deadline, watched, emit, counts):
     """Decode this transport until `deadline`, calling `emit` with one Trade per trade.
 
     `watched` is a set of base58 wallet addresses, empty for every wallet. There is no
-    application filter here as there is on Robinhood Chain: Solana has no code-based
+    application filter here as there is on the EVM chains: Solana has no code-based
     marker, so everything reached through FOMO's co-signer is FOMO's. `Trade.key` is
     the signature, which identifies one trade across transports.
     """
@@ -134,7 +134,12 @@ async def listen(deadline, watched, emit, counts):
                     if abs(lamports) > 1e-9:
                         moved.append((lamports, "SOL"))
 
-            kind, gave, got, note = classify(moved, programs, RELAY_DEPOSIT in programs or bool(intent))
+            # Relay's program reached through another program's call is not a top-level
+            # instruction, but it is still among the accounts, the carried ones or those loaded
+            # from a lookup table — the same test 04 applies to its parsed block.
+            loaded = list(meta.loaded_writable_addresses) + list(meta.loaded_readonly_addresses)
+            every = set(keys) | {base58.b58encode(k).decode() for k in loaded}
+            kind, gave, got, note = classify(moved, programs, RELAY_DEPOSIT in every or bool(intent))
             order = order or intent
             counts[kind] += 1
             signature = base58.b58encode(info.signature).decode()

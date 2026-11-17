@@ -1,11 +1,10 @@
 """How a listener is started from the command line, and what it prints when it stops.
 
-Five listeners were each carrying the same fifteen lines: refuse a first argument that is
-not a duration, collect the wallets after it, check the endpoints, print a banner, open the
-feed, run until the deadline, and tally what was counted. Five copies had already drifted —
-two parsed argv one way and folded their wallets to lower case, three did neither — so an
-argument bug had five places to be fixed and a reader had five versions to compare. The
-shell is here; the decoding stays in each listener, where the wire format it reads is.
+Every listener starts the same way: refuse a first argument that is not a duration, collect
+the wallets after it, check the endpoints, print a banner, open the feed, run until the
+deadline, and tally what was counted. That shell is here, once, so an argument rule changes
+in one place and every listener parses alike; the decoding stays in each listener, where
+the wire format it reads is.
 
 Nothing here makes a request: `run()` calls the `listen()` the caller hands it.
 """

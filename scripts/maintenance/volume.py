@@ -4,8 +4,8 @@ Every trade is counted once, on the leg that names its size in cash:
 
   Solana           SWAP  a trade that stayed on Solana, both sides named
   each EVM chain   PAY   cash left Solana and the token was delivered on that chain, which
-                         the Relay order id on both legs proves
-                   SELL  a token swapped on that chain, proceeds handed to Relay
+                         the order id or intent id on both legs proves
+                   SELL  a token swapped on that chain, proceeds handed to a route
   chain unknown    PAY   cash left Solana and the delivery was never seen, so which chain
                          ran the swap is unknown
 
@@ -25,10 +25,11 @@ FOMO's sits on the chain the trade ran on, so its payout on Solana has nothing t
 against and `00` counts it with every other application's. Neither lands on the wrong chain.
 
 Volume is in dollars, and a dollar figure needs a price. The only price used here is that a
-stablecoin is worth a dollar, which covers all but a per-mille of these rows because FOMO
-prices everything in stablecoins. Anything else — a native-asset sell, an amount the chain
-would not decode — is counted unpriced rather than valued at a guess, and this script makes
-no request to anything. Amounts are already scaled by the decimals each token reported, so
+stablecoin is worth a dollar. A sell through the intent route hands the native asset to the
+route, so it is priced by its payout on Solana, which is USDC under the same id; one whose
+payout the run did not see stays unpriced. Anything else — an amount the chain would not
+decode — is counted unpriced rather than valued at a guess, and this script makes no request
+to anything. Amounts are already scaled by the decimals each token reported, so
 an 18-decimal stablecoin is read the same as a 6-decimal one.
 
 Reads `scripts/runs/00_listen_fomo-*.jsonl` and nothing else: only that listener records
@@ -83,7 +84,7 @@ def recorded(hours):
 
     Two runs can overlap, and a trade seen by both is one trade. `key` identifies a trade on
     its chain rather than in a run — a signature on Solana, a transaction and log index on
-    Robinhood Chain — so `(chain, key)` is what a duplicate shares.
+    an EVM chain — so `(chain, key)` is what a duplicate shares.
     """
     since = datetime.now(UTC) - timedelta(hours=hours)
     rows, seen, files = [], set(), 0
@@ -145,7 +146,7 @@ def count(rows):
     # Which EVM chain each delivered order landed on: the payment never says, the fill does.
     landed = {row["order_id"]: NAMES[row["chain"]] for row in on_evm("BUY") if joins(row)}
     sold = order_ids(on_evm("SELL"))  # sells FOMO's wallets made on any EVM chain
-    paid_out = order_ids(of_kind("SOL", "FILL"))  # sells Relay was seen settling on Solana
+    paid_out = order_ids(of_kind("SOL", "FILL"))  # sells a solver was seen settling on Solana
 
     volume, missing, unlinked, unmatched = {}, Counter(), 0, 0
 
@@ -182,10 +183,15 @@ def count(rows):
             add("chain unknown", "payments whose delivery was not matched: a buy, or cash leaving FOMO", value)
 
     # A sell is readable end to end on its EVM chain: the token left the wallet and the
-    # proceeds went into Relay's depository in the same transaction. That is the sell's
-    # size, a second before Relay takes its cut and pays the rest out on Solana.
+    # proceeds went into a route in the same transaction. Relay's proceeds are the chain's
+    # cash, which is the sell's size a second before the route takes its cut. The intent
+    # route's are the native asset, which nothing here prices, so such a sell is priced by
+    # its payout on Solana instead: USDC, carrying the same id, after the cut.
+    received = {row["order_id"]: dollars(row.get("got")) for row in of_kind("SOL", "FILL")}
     for row in on_evm("SELL"):
         value = dollars(row.get("got"))
+        if value is None and row.get("order_id") in sold:
+            value = received.get(row["order_id"])
         if value is None:
             missing[UNPRICED] += 1
             continue
@@ -211,7 +217,6 @@ def count(rows):
     # What Relay and the solver keep, read off the two ends of the same sells rather than
     # quoted from anywhere: what went into the depository against what came out on Solana.
     deposited = {row["order_id"]: dollars(row.get("got")) for row in on_evm("SELL")}
-    received = {row["order_id"]: dollars(row.get("got")) for row in of_kind("SOL", "FILL")}
     into, out = 0.0, 0.0
     for order in sold & paid_out:
         before, after = deposited.get(order), received.get(order)
@@ -219,7 +224,7 @@ def count(rows):
             into, out = into + before, out + after
     kept = (into - out) / into if into else None
 
-    return volume, missing, len(sold & paid_out), kept, moved, unlinked, unmatched
+    return volume, missing, len(sold & paid_out), len(sold), kept, moved, unlinked, unmatched
 
 
 def by_chain(volume, chain):
@@ -239,7 +244,7 @@ def main():
         return
     print(f"covered  {covered(rows) / 60:.1f} min of it was recorded — these totals are of that, not of the window")
 
-    volume, missing, settled, kept, moved, unlinked, unmatched = count(rows)
+    volume, missing, settled, sells, kept, moved, unlinked, unmatched = count(rows)
     total = sum(row["usd"] for row in volume.values())
     trades = sum(row["trades"] for row in volume.values())
 
@@ -269,8 +274,7 @@ def main():
     print("matched — a buy outside the run, on a chain switched off or on one no listener reads, or a")
     print("withdrawal — so that row is a ceiling and every chain above it a floor.")
 
-    sells = sum(row["trades"] for (_, line), row in volume.items() if line.startswith("sells"))
-    cut = f", for {kept * 100:.2f}% less than they deposited" if kept else ""
+    cut = f", Relay's for {kept * 100:.2f}% less than they deposited" if kept else ""
     print(f"\n{settled} of {sells} sells were also seen being paid out on Solana{cut}.")
     if moved:
         print(f"{moved} payments on EVM chains were cash moving to Solana, paid out there as cash: not volume.")

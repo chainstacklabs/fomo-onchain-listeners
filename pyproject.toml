@@ -1,7 +1,7 @@
 [project]
 name = "fomo-onchain-listeners"
 version = "0.1.0"
-description = "Onchain listeners and a technical reference for the FOMO trading app on Solana and Robinhood Chain"
+description = "Onchain listeners and a technical reference for the FOMO trading app on Solana and every EVM chain it trades on"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

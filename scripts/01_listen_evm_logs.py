@@ -32,7 +32,9 @@ have both a sell's proceeds and a separate buy payment in the same bundle.
 
 FOMO is one tenant of Relay here. A wallet's EIP-7702 delegation names the implementation
 it runs, which in practice names the application, so it is both the test that keeps other
-applications out of this feed and the value reported as `Trade.app`. One buy escapes it: a
+applications out of this feed and the value reported as `Trade.app`. Where other applications
+share that delegation they sponsor their operations through a paymaster, so a deposit or a send
+from an operation naming one is theirs, counted and not reported. One buy escapes it: a
 wallet that has never sent an operation on this chain has no delegation here yet, so a token
 delivered to it reads as an EOA's. `listen()` takes `claimed`, a test on the order id, for a
 caller that knows better — 00_listen_fomo.py passes the order ids FOMO's co-signer paid on
@@ -473,7 +475,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                 counts["intent sends that are not FOMO's"] += 1
                 return
             paid = quantity(raw, 18, here.native)
-            went_out = moved_from(logs, user, start, end)
+            went_out = moved_from(logs, user, start, end, here.cash)
             if went_out is None:
                 counts["PAY"] += 1
                 emit(Trade("PAY", paid, UNNAMED, user, app, "", where_of(log), trade_key(log), order))

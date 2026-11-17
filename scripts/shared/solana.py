@@ -34,9 +34,10 @@ DEPOSIT_DISCRIMINATOR = bytes.fromhex("0b9c60da27a3b413")
 # FOMO pays in USDC and never sends this one; only maintenance/relay_share.py reads it.
 NATIVE_DEPOSIT_DISCRIMINATOR = bytes.fromhex("0d9e0ddf5fd51c06")
 
-# The other direction. A sell executed on Robinhood Chain pays out here, and a solver
+# The other direction. A sell executed on an EVM chain pays out here, and a solver
 # signs that transfer rather than FOMO, so the co-signer is not in it and no listener
-# above ever receives it. The order id travels in a memo.
+# keyed on the co-signer receives it; `05` and `06` key on the solvers. The order id
+# travels in a memo.
 SETTLEMENT_SOLVER = "F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe"
 # The two SPL memo programs, and a third the intent route writes its ids through. A memo
 # sent through a program missing here is never read, and its payment reads as an OUT.

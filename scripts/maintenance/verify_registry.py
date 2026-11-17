@@ -231,7 +231,7 @@ else:
         "Relay's deposit program is executable",
         bool(((deposit or {}).get("value") or {}).get("executable")),
     )
-    # The solver that pays out a Robinhood Chain sell. Its address is the part of this
+    # Relay's solver, which pays out a sell made on an EVM chain. Its address is the part of this
     # entry that can go stale, because Relay's solvers rotate: what it must still be
     # doing is signing transfers that carry an order id in a memo.
     settlement = sol["settlement"]

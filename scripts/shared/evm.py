@@ -351,14 +351,17 @@ def intent_buyer(info):
     return Web3.to_checksum_address("0x" + word(info["input"][10:], 2)[24:])
 
 
-def moved_from(logs, user, start, end):
+def moved_from(logs, user, start, end, cash):
     """(token, raw amount) of the first token `user` sent inside (start, end), or None.
 
     That is the token a sell gave up: the operation hands it to a router, and everything
-    after is the router's. Scoped to the user's own operation, as a deposit is.
+    after is the router's. Scoped to the user's own operation, as a deposit is. `cash` is
+    the chain's quote tokens, which are skipped: a stablecoin swapped to the native asset
+    and sent is the balance moving to Solana, not a sale, exactly as a stablecoin deposited
+    into Relay is.
     """
     for log in logs:
-        if topic(log) != TRANSFER or len(log["topics"]) < 3:
+        if topic(log) != TRANSFER or len(log["topics"]) < 3 or log["address"].lower() in cash:
             continue
         if start < int(log["logIndex"], 16) < end and address_in_topic(log, 1).lower() == user.lower():
             return log["address"], int(log["data"][2:] or "0", 16)

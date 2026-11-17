@@ -81,8 +81,8 @@ by a solver, calling no program of its route and emitting no event. Nothing abou
 so it takes its own subscription and counts as FOMO's only when its order id matches a sell seen on
 an EVM chain.
 
-FOMO's wallets delegate to a public reference account that other applications use too on every EVM
-chain but Robinhood Chain. What tells FOMO's operations apart is that they name no paymaster: FOMO's
+FOMO's wallets delegate to a public reference account that other applications use too on BNB Smart
+Chain, Base, Ethereum and Monad. What tells FOMO's operations apart is that they name no paymaster: FOMO's
 bundler pays the gas, while the others are sponsored. The listeners apply both tests,
 [`docs/04-listening.md`](docs/04-listening.md) has the rule.
 

@@ -60,7 +60,7 @@ buys = crossed[(crossed.chain == "SOL") & (crossed.kind == "PAY")].merge(
 
 The two legs land within about two seconds of each other, so a window of ten is generous. A leg
 whose partner fell outside the run has no match; `00_listen_fomo.py` counts those at the end as
-*still in flight* and *sells with no payout seen*.
+*sells with no payout seen* and *payouts for other applications*.
 
 `key` is the dedup key. It is derived from the chain, not from the run, so the same trade recorded
 by two listeners carries the same `key`.
@@ -115,11 +115,13 @@ The settlement check under the table reads both ends of the same sells. Across t
 on 2026-09-15 the payout on Solana was 0.62% smaller than the deposit on Robinhood Chain, which is
 what Relay and the solver keep on a sell — measured off the two legs, not quoted.
 
-A stablecoin is worth a dollar and nothing else is priced, which values all but a per-mille of the
-rows. Amounts are already scaled by the decimals each token reports, so an eighteen-decimal
-stablecoin on BNB Smart Chain sums with a six-decimal one elsewhere. A native-asset sell, a
-token-for-token swap, and an amount the chain would not decode are counted unpriced under the table
-rather than valued at a guess.
+A stablecoin is worth a dollar and nothing else is priced. That values Relay's sells and payments,
+which are paid in the chain's cash. The intent route's sells are paid in the native asset, so each
+is valued at its payout on Solana, which is USDC under the same intent id and arrives after the
+route's cut; one whose payout the run did not see is counted unpriced. Amounts are already scaled
+by the decimals each token reports, so an eighteen-decimal stablecoin on BNB Smart Chain sums with
+a six-decimal one elsewhere. A token-for-token swap and an amount the chain would not decode are
+counted unpriced under the table rather than valued at a guess.
 
 A window is not coverage. A file holds only what its own run was listening to — minutes inside a
 window of hours — so the report prints the time actually watched beside the window asked for, and a
@@ -129,10 +131,9 @@ window with no run in it is empty rather than zero.
 
 Only `00_listen_fomo.py` records every chain, so only its files join without a merge across files.
 
-The `PAY` and `FILL` streams are Relay's, not FOMO's: they carry every application settling through
-the same contracts. A row becomes FOMO's when its `order_id` matches a leg that `app` marks as
-FOMO's — which is why `00_listen_fomo.py` counts *payouts for other applications* rather than
-hiding them.
+The `FILL` stream is the two solvers', not FOMO's: it carries every application they settle on
+Solana. A row becomes FOMO's when its `order_id` matches a leg that `app` marks as FOMO's — which
+is why `00_listen_fomo.py` counts *payouts for other applications* rather than hiding them.
 
 Every transport here subscribes. A window nobody was listening to is gone: nothing in this
 repository re-reads a block range into this shape, and a file records only what its own run saw.

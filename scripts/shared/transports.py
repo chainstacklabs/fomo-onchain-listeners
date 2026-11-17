@@ -1,10 +1,9 @@
 """Which transports exist, what each one needs in `.env`, and what to call it.
 
-00_listen_fomo.py and maintenance/compare_listeners.py both pick transports by name, and both have
-to know which chain one reads and what an unconfigured one is missing. They carried that
-table twice and the copies had already drifted: one listed four transports and the other
-five, and each said which chain a transport reads in its own way. It is one table now, so
-adding a transport is one row and the two entry points cannot disagree about what exists.
+00_listen_fomo.py and maintenance/compare_listeners.py both pick transports by name, and both
+have to know which chain one reads and what an unconfigured one is missing. This is the one
+table they read, so adding a transport is one row and the two entry points cannot disagree
+about what exists.
 
 Every EVM chain in shared/evm.py's `CHAINS` gets the same two rows, `<chain>-logs` and
 `<chain>-blocks`, read by the same two scripts with the chain bound in. Adding a chain is a

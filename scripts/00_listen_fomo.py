@@ -6,7 +6,7 @@ listener per chain, side by side, and prints them as a single stream. The EVM ch
 the rows of shared/evm.py's `CHAINS`.
 
 Every kind reaches this feed — BUY, SELL and PAY off each EVM chain, SWAP, PAY, IN, OUT and
-OTHER off Solana. shared/feed.py defines what each one means.
+OTHER off Solana, and FILL off the payout solvers. shared/feed.py defines what each one means.
 
 Every chain runs in one process, so the halves of a cross-chain buy can be put back
 together. FOMO crosses by two routes, and each writes one id on both chains: Relay's order
@@ -25,7 +25,7 @@ nothing in a payout says which application it belongs to — a payout is named h
 when its id matches a sell this run sees on an EVM chain, before or after it. The rest
 are counted.
 
-One transport per subject, named to override the default. The defaults are the three that
+One transport per subject, named to override the default. The defaults are the ones that
 run on an ordinary endpoint; a default whose endpoint is missing from .env exits saying
 which variable it wants, rather than listening over something else or dropping the subject.
 Which transport is faster or more complete is a property of your endpoint, so measure
@@ -58,11 +58,11 @@ all of them, and a base58 one filters Solana. A chain given no wallet keeps stre
 FOMO trade. One user is two addresses, so watching a person means passing both.
 
 This decodes nothing itself. It imports `listen()` from 01 through 06, so a
-decoding rule lives in exactly one place, and it is the only script here that imports
-another. Rows are laid out for the eye; every field in full goes to
+decoding rule lives in exactly one place; maintenance/compare_listeners.py is the only other
+script that imports one. Rows are laid out for the eye; every field in full goes to
 `scripts/runs/00_listen_fomo-<time>.jsonl`, one JSON object per trade.
 
-Reference: docs/04-listening.md, docs/02-trade-lifecycle.md (Four shapes).
+Reference: docs/04-listening.md, docs/02-trade-lifecycle.md (Five shapes).
 
     uv run scripts/00_listen_fomo.py [seconds] [transport ...] [wallet ...]   default 120
 """

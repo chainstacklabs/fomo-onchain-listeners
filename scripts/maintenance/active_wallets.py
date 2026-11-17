@@ -6,10 +6,11 @@ many separate runs an address appears in, which is the closest thing the recordi
 "still active". A wallet seen in eight runs across a week is worth pointing a script at; one
 seen forty times inside a single run is one busy afternoon.
 
-It also recovers what FOMO's backend does not publish. The Relay order id is written on both
-chains, so a row on each side carrying the same id is one person: their EVM address, which is
-the same on every EVM chain, and their Solana address, linked with no help from the app. Buys
-join a Solana payment to an EVM fill, sells join an EVM deposit to a Solana payout.
+It also recovers what FOMO's backend does not publish. The Relay order id or the intent id is
+written on both chains, so a row on each side carrying the same id is one person: their EVM
+address, which is the same on every EVM chain, and their Solana address, linked with no help
+from the app. Buys join a Solana payment to an EVM fill, sells join an EVM deposit or send to
+a Solana payout.
 
 Reads `scripts/runs/*.jsonl`, which the listeners write, and puts `wallets.local.json` beside
 this script rather than beside them: nothing else reads it, and the top level of `scripts/` is
@@ -66,7 +67,7 @@ def read():
             entry["runs"].add(path.name)
             entry["last"] = max(entry["last"], day)
             # Runs recorded before the field was renamed carry the id as `link`. Both
-            # names mean the Relay order id, and most of the corpus predates the rename,
+            # names mean the id that joins two legs, and most of the corpus predates the rename,
             # so reading only the new name loses most of the pairs it should have found.
             order = row.get("order_id") or row.get("link")
             if order:
@@ -116,7 +117,8 @@ def main():
                 "by scripts/maintenance/active_wallets.py.",
                 "_rank": "By how many separate runs an address appears in, not by trade count: persistence is the "
                 "closest thing a recording holds to still being active.",
-                "_pairs": "One Relay order id seen on both chains is one person. FOMO does not publish this mapping.",
+                "_pairs": "One order id or intent id seen on both chains is one person. "
+                "FOMO does not publish this mapping.",
                 "_refresh": "Run the listeners to record more, then: uv run scripts/maintenance/active_wallets.py",
                 "_builtAt": datetime.now().strftime("%Y-%m-%d"),
                 "_from": {"runs": len(files), "wallets": len(wallets), "pairs": len(joined)},

@@ -1,9 +1,8 @@
 """Where an endpoint comes from, and what happens when it is not there.
 
 Every script reads its endpoints from `.env` and none of them substitute anything for a
-missing one: a script started without its endpoint exits naming the variable to set. Eight
-scripts were each carrying the same three lines to say so, which is three lines too many to
-keep saying identically by hand. `.env.example` carries the names.
+missing one: a script started without its endpoint exits naming the variable to set. That
+rule is written once, here. `.env.example` carries the names.
 """
 
 import os
