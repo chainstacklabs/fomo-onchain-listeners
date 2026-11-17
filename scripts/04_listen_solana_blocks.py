@@ -57,7 +57,7 @@ async def listen(deadline, watched, emit, counts):
     """Decode this transport until `deadline`, calling `emit` with one Trade per trade.
 
     `watched` is a set of base58 wallet addresses, empty for every wallet. There is no
-    application filter here as there is on Robinhood Chain: Solana has no code-based
+    application filter here as there is on the EVM chains: Solana has no code-based
     marker, so everything reached through FOMO's co-signer is FOMO's. `Trade.key` is
     the signature, which identifies one trade across transports.
     """

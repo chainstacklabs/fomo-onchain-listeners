@@ -19,7 +19,7 @@ Every file in `scripts/` follows the same shape — match it:
 - **A listener that loses its subscription stops.** It does not poll to cover the gap and does not
   drain an empty queue until the deadline, either of which ends in a summary that reads like a
   quiet chain rather than a socket that died. The exception propagates; `00` reports which
-  transport stopped and carries on with the other chain.
+  transport stopped and carries on with the rest.
 - **Nothing is substituted for a value that could not be read, either.** A token whose `decimals()`
   did not answer is printed unscaled and marked `?`, never divided by a guessed 18: a wrong number
   that looks right is worse than an obviously missing one, and the failure is counted.
@@ -118,12 +118,12 @@ with the same four arguments.
   that has never operated on that chain — is still reported.
 - `Trade.app` is the application behind the wallet, read from its EIP-7702 implementation. FOMO is
   one of several tenants of Relay, so that value is the filter as well as the label: a listener
-  emits the wallets carrying FOMO's delegation and nobody else's. Off Robinhood Chain other
-  applications share the delegation, and a deposit from an operation a paymaster paid for is
-  theirs: it is counted, never emitted.
-- `kind` is `BUY`, `SELL`, `PAY`, `SWAP`, `IN`, `OUT`, or `OTHER`. `OTHER` means this transport
-  received the trade but cannot classify it, which is not the same as disagreeing about it;
-  `maintenance/compare_listeners.py` counts it as seen and leaves it out of the disagreement
+  emits the wallets carrying FOMO's delegation and nobody else's. On BNB Smart Chain, Base,
+  Ethereum and Monad other applications share the delegation, and a deposit from an operation a
+  paymaster paid for is theirs: it is counted, never emitted.
+- `kind` is `BUY`, `SELL`, `PAY`, `SWAP`, `FILL`, `IN`, `OUT`, or `OTHER`. `OTHER` means this
+  transport received the trade but cannot classify it, which is not the same as disagreeing about
+  it; `maintenance/compare_listeners.py` counts it as seen and leaves it out of the disagreement
   tally. **A listener must never silently drop a transaction it received.** Doing so makes the
   feed look complete when it is not, and makes the transport look lossy when the endpoint is fine.
 
@@ -144,16 +144,18 @@ rest of `maintenance/` are never imported and run at module level.
 bottom and any one step lifted out of it:
 
 - module level, no network and no state — the pure steps. `01` has `wanted`, `is_fomo` and
-  `sold_in_span`; `02` has `result`, `operation_boundaries`, `swaps_by_transaction` and its own
-  `sold_in_span`, which reads raw `Transfer` logs where `01` reads what its subscription recorded.
-- module level, one call each — the lookups. `01` has `rpc`, `token_meta`, `app_of` and `order_of`,
-  and each takes the cache it should remember its answer in rather than closing over one, so none
-  of them holds state and any of them can be called on its own.
+  `sold_in_span`; `02` has `result`, `operation_boundaries`, `swaps_by_transaction`, `read_intents`
+  and its own `sold_in_span`, which reads raw `Transfer` logs where `01` reads what its
+  subscription recorded.
+- module level, one call each — the lookups. `01` has `rpc`, `token_meta`, `app_of`, `receipt_of`,
+  `transaction_of` and `order_of`, and each takes the cache it should remember its answer in
+  rather than closing over one, so none of them holds state and any of them can be called on its
+  own.
 - inside `listen()` — the transport, and nothing else: what to subscribe to, and when a log has
   enough of its transaction to be decoded. `01` holds fills and deposits until a later block
-  arrives; `02` sweeps a block range per head. Both wire the steps above into four named
-  functions that turn one log into one `Trade` — `02` names its sweep's phases too, so `handle()`
-  reads as the four round trips and two decoding passes it is.
+  arrives; `02` sweeps a block range per head. Both wire the steps above into named functions
+  that turn one log into one `Trade` — `02` names its sweep's phases too, so `handle()` reads as
+  the round trips and decoding passes it is.
 
 A step that needs no network and no run state goes to `shared/evm.py` instead, where the other
 EVM scripts can reach it.
@@ -167,8 +169,8 @@ docstring names the three facts a Geyser update states differently.
 ## Before calling a script done
 
 - `uvx ruff check scripts/` and `uvx ruff format scripts/`, both clean. `.github/workflows/lint.yml`
-  runs the same two on every push and pull request, against the pinned ruff in that file — bump
-  both together, since a formatter release can reflow code nobody touched.
+  runs the same two on every pull request and every push to `main`, against the pinned ruff in
+  that file — bump both together, since a formatter release can reflow code nobody touched.
 - Run it against a live endpoint and read the output, rather than trusting that it parses. For a
   listener, check that the `runs/*.jsonl` row count matches the summary tally, and that piping it
   through `cat` leaves no escape codes behind.

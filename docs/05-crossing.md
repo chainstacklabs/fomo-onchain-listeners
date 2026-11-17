@@ -168,7 +168,8 @@ same second, delivering the token to `0xd72b136d…27b2`.
    the memo program.
 
 A send with no token leaving the wallet first is cash moving to Solana rather than a sell, exactly as
-a Relay deposit with nothing sold beside it is.
+a Relay deposit with nothing sold beside it is. A stablecoin swapped to the native asset first is the
+same: the cash changed form on its way out, and nothing was sold.
 
 Elysium transaction `0x2897159cbf6deb36fda97f0aa79875734920502d9c7eddddb1c1573d7a92fdd1` sold
 62,058 of a token for 0.048 HYPE and sent it with the intent id `043c428-f3970e4-b70`; Solana
@@ -189,7 +190,7 @@ The contract is unverified, so its events are known by topic and named here by w
 
 The key is not a hash of the intent id. The id is only ever read from the id event, which comes
 first in every trade. Two more events fire on the contract, `0x81a143d8…` naming Relay's depository
-and `0x92c2a9e4…`, neither of them a trade; a listener counts them. Full topics are in
+and `0x92c2a9e4…`, neither of them a trade; a listener counts them. The four trade events' full topics are in
 [`registry.json`](../scripts/maintenance/registry.json).
 
 ### Who runs it

@@ -25,7 +25,7 @@ Solana the subscription is on a signer and sees only what FOMO signs.
 
 Every EVM chain FOMO trades on — Robinhood Chain, BNB Smart Chain, Base, Ethereum, Monad and
 Elysium — runs Relay's contracts and the account layer at the same addresses, and the intent route's
-contract is at one address on the four of them it is deployed on, so everything below under **EVM
+contract is at one address on Robinhood Chain, BNB Smart Chain, Base and Elysium, so everything below under **EVM
 chains** holds on each of them, and one listener reads any of them with the chain named.
 
 The payment for a crossing buy carries an amount and an opaque identifier, by either route. Nothing
@@ -78,8 +78,7 @@ carries the delegation or is a plain address whose intent id a FOMO payment on S
 
 | Chain | Marker |
 |---|---|
-| Robinhood Chain | the wallet's code is the EIP-7702 delegation every FOMO wallet carries |
-| BNB Smart Chain, Base, Ethereum, Monad, Elysium | the same delegation, and no paymaster on the depositor's or sender's operation; for a buy, the delegation, or the order id or intent id of a FOMO payment on Solana |
+| Every EVM chain | the same delegation, and no paymaster on the depositor's or sender's operation; for a buy, the delegation, or the order id or intent id of a FOMO payment on Solana |
 | Solana | the co-signer that signs and pays for every FOMO transaction |
 | Relay's API | the `referrer` field on each request record; keyless only until 2026-11-24, when `/requests/v2` is sunset |
 | Relay's chain | none — solvers and assets are visible, the application behind an order is not |
@@ -122,9 +121,10 @@ same transaction, and the order id from the router's calldata.
 event carrying the intent id; a fill event is a buy, and a send event is a sell or cash leaving for
 Solana. Neither names the token or the buyer, so read the transaction's receipt: a buy's token is
 the last `Transfer` into the buyer, whom word 2 of the relayer's call names in either of its two
-shapes, and a sell's token is the first `Transfer` out of the sender inside its own operation. A
-send with nothing sold before it is a payment. Two further events fire on the contract and are not
-trades.
+shapes, and a sell's token is the first non-cash `Transfer` out of the sender inside its own
+operation. A send with nothing sold before it is a payment, and so is a stablecoin swapped to the
+native asset and sent: that is the balance moving to Solana, as a stablecoin deposit into Relay is. Besides the payment event beside most fills, two
+further events fire on the contract and are not trades.
 
 **Buy payments.** Deposits into Relay's depository name the payer and the amount but never the
 destination. There are two deposit events, one per asset kind, and they are the same trade: watching
@@ -270,7 +270,7 @@ matches a sell, or cash sent to Solana, seen on an EVM chain.
 
 Closing a wrapped-SOL account refunds its rent, about 0.002 SOL, to the wallet, and that refund
 lands in the same balance delta as the trade itself. Taken at face value it becomes the token
-bought, so a two-lamport rent refund is reported as the purchase. Ignore SOL and wrapped-SOL
+bought, so a 0.002 SOL rent refund is reported as the purchase. Ignore SOL and wrapped-SOL
 movements under 0.005 whenever anything else moved.
 
 ## Transports
@@ -401,7 +401,7 @@ USDC into the seller's token account, so `getSignaturesForAddress` on the seller
 list it either — an SPL transfer names the token account, and `getTokenAccountsByOwner` is what
 turns a wallet into one. The solvers' addresses are in
 [`registry.json`](../scripts/maintenance/registry.json) under `solana.settlement` and
-`solana.intent`; Relay's solvers rotate the way this chain's bundlers do, so re-check them rather
+`solana.intent`; Relay's solvers rotate the way the EVM chains' bundlers do, so re-check them rather
 than building an allowlist on them.
 The second memo a payout carries is a nonce whose first characters spell the unix time, not an
 application tag: there is nothing on this side to attribute with.
@@ -423,7 +423,7 @@ for the addresses that keep trading, joining each one's two chains by the same o
 
 Read from the chains. Every subscription and decoding rule here is implemented by the scripts in
 [`../scripts/`](../scripts/), run against Chainstack endpoints on Robinhood Chain, BNB Smart
-Chain, Base, Ethereum, Monad and Solana mainnet. On 2026-10-30
+Chain, Base, Ethereum, Monad, Elysium and Solana mainnet. On 2026-10-30
 [`maintenance/probe_chain.py`](../scripts/maintenance/probe_chain.py) found the same contracts on
 all five EVM chains, and found the delegation on 287, 239, 155 and 33 of 300 wallets recorded on
 Robinhood Chain when read on BNB Smart Chain, Base, Ethereum and Monad. It also measured the

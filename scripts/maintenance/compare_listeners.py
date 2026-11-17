@@ -1,4 +1,4 @@
-"""Run every transport at once and report what each one caught, missed, and by how long.
+"""Run every FOMO-keyed transport at once and report what each one caught, missed, and by how long.
 
 The listeners in this repository read the same flow through different pipes, and the pipes
 do not behave alike: one is a paid add-on, one has been seen carrying a small fraction of
@@ -12,7 +12,7 @@ in the decoding. Four of them together cost about a fifth of one core and leave 
 waiting on a 50 ms timer roughly a millisecond late, two orders of magnitude below the lags
 being measured; a process apiece moves none of the numbers and is not worth the machinery.
 
-Trades are keyed by transaction hash and log index together on Robinhood Chain, and by
+Trades are keyed by transaction hash and log index together on an EVM chain, and by
 signature on Solana, so one trade seen through three transports is one row. A hash alone
 would not do here: one handleOps bundle carries several users, and keying by it merges two
 people's trades into one. Transports are compared only against others on their own chain,

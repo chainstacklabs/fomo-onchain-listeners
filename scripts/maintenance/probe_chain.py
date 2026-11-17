@@ -11,7 +11,7 @@ Chain only because FOMO is nearly its only tenant there.
 So this reports five things off the chain itself:
 
 - which of the contracts the listeners key on have code here;
-- what the wallets already known from Robinhood Chain carry here. A Privy wallet has the same
+- what the wallets already recorded as FOMO's carry here. A Privy wallet has the same
   address on every EVM chain, so those wallets are ground truth that costs nothing;
 - over a recent window, who sends operations through version 0.8: how many senders carry the
   delegation, and how many of those are wallets known to be FOMO's. That second share is the
@@ -27,7 +27,7 @@ Known wallets are every EVM wallet the listeners have recorded as FOMO's in `run
 chain. With no recordings the comparisons are skipped and the run says so.
 
     uv run scripts/maintenance/probe_chain.py <chain> [seconds] [wallets]   default 600, 300
-    chain: a key of shared/evm.py's CHAINS, or base | eth | monad | elysium
+    chain: a key of shared/evm.py's CHAINS, or a new chain's key added to PREFIX
 """
 
 import json
@@ -62,10 +62,10 @@ from shared.evm import (
     intent_buyer,
 )
 
-# Every chain with a row in shared/evm.py, plus the ones that do not have one yet: probing
-# a chain is how it earns its row, so this cannot be limited to the table.
+# Every chain with a row in shared/evm.py. Probing a chain is how it earns its row, so a new
+# one is added here by hand first, as `PREFIX["<key>"] = "<VARIABLE>"`, naming its endpoints'
+# prefix in .env.
 PREFIX = {network: chain.variable for network, chain in CHAINS.items()}
-PREFIX |= {"base": "BASE", "eth": "ETHEREUM", "monad": "MONAD", "elysium": "ELYSIUM"}
 RUNS = Path(__file__).parent.parent / "runs"
 
 args = sys.argv[1:]

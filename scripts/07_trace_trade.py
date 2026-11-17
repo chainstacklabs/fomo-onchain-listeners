@@ -15,9 +15,9 @@ The two directions are not shaped alike, and the id sits somewhere different in 
          Solana is the same shape with no swap before the deposit, so the deposit is
          printed as one and not called a sale.
 
-A sell's payout is signed by a Relay solver and not by FOMO's co-signer, so no listener in
-this repository sees it — the co-signer subscription never receives that transaction. This
-script finds it by reading the solver's own recent transactions.
+A sell's payout is signed by a Relay solver and not by FOMO's co-signer, so no listener keyed
+on the co-signer sees it; 05 and 06 subscribe to the solvers instead. This script finds it by
+reading the solver's own recent transactions.
 
 The intent route has the same two directions with the id in different places:
 
@@ -114,6 +114,8 @@ ORDER_WORD = {DEPOSIT: 3, NATIVE_DEPOSIT: 2}
 if len(sys.argv) < 2:
     sys.exit(__doc__)
 target = sys.argv[1]
+if len(sys.argv) > 2 and not sys.argv[2].isdigit():
+    sys.exit(f"the last argument is a number of minutes, not {sys.argv[2]!r}")
 minutes = int(sys.argv[2]) if len(sys.argv) > 2 else 5
 # Two of the busiest addresses on Solana are paged here. `blockTime` can come back null,
 # and the cutoff is the only thing that ends the walk — without a cap, one null entry
@@ -548,7 +550,7 @@ def show_intent_evm(tx_hash, intent):
             user, raw = intent_sent(log)
             operations = [int(op["logIndex"], 16) for op in logs if topic(op) == USEROP]
             start, end = span(operations, int(log["logIndex"], 16))
-            sold = moved_from(logs, user, start, end)
+            sold = moved_from(logs, user, start, end, here.cash)
             recipient = base58.b58encode(bytes.fromhex(word(log["data"][2:], 1))).decode()
             print(f"\n  sent on {here.name}   {tx_hash}")
             if sold:

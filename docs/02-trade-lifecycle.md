@@ -5,7 +5,7 @@ the same chain. If they do, it is a single swap. If they do not, it is two trans
 chains, and the second is signed by a stranger. The user names a token and an amount; the route,
 the price and — on a crossing trade — the capital all come from parties they never chose.
 
-## Four shapes
+## Five shapes
 
 The app shows a single cash balance. The user never picks a chain, and nothing asks where the money
 should come from.

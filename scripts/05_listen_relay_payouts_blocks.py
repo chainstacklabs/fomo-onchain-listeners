@@ -10,31 +10,30 @@ EVM chain. One `blockSubscribe` takes one account, so each solver gets its own s
 on the same socket.
 
 Not every payout on this stream is a token transfer. FOMO's own are USDC, but about one in
-ten of the solver's is native SOL, sent as a system transfer with the same order-id memo and
+ten of Relay's solver's is native SOL, sent as a system transfer with the same order-id memo and
 no token account anywhere in the transaction, so reading token balances alone drops those
 without a trace. Lamport gains are read whenever no token moved, which is the only way those
 payouts are seen at all — they belong to other applications, and losing them uncounted makes
 this stream look quieter than it is.
 
 This is therefore not a FOMO feed and does not pretend to be one. Relay's solver serves every
-application and every origin chain Relay settles from, and roughly half of what arrives
-here was paid for somewhere other than Robinhood Chain. Nothing in a payout says which
+application and every origin chain Relay settles from. Nothing in a payout says which
 application it belongs to: the second memo it carries is a nonce whose first characters
 spell the unix time, not a tag. Attribution needs the deposit behind the order id, which
 lives on the other chain, so 00_listen_fomo.py is where a payout becomes a named FOMO sell
-— it holds each sell it sees on Robinhood Chain and matches this order id against it.
+— it holds each sell it sees on an EVM chain and matches this id against it.
 
 Emits FILL, defined in shared/feed.py: money leaving a solver, with the recipient and the
 id that says which sell it settles. `Trade.app` is left empty because this chain
 cannot answer it.
 
-Solver addresses rotate the way Robinhood Chain's bundlers do. When this one is replaced
-the stream goes quiet rather than wrong, so a run that reports no payouts at all is a
-reason to re-check the address rather than to conclude that nobody sold; the address is in
+Solver addresses rotate the way the EVM chains' bundlers do. When one is replaced the
+stream goes quiet rather than wrong, so a run that reports no payouts at all is a reason to
+re-check the addresses rather than to conclude that nobody sold; both are in
 maintenance/registry.json under `solana.settlement` and `solana.intent`, and
 maintenance/verify_registry.py checks both.
 
-Runs on an ordinary WebSocket endpoint, with no add-on. For the same solver read one
+Runs on an ordinary WebSocket endpoint, with no add-on. For the same solvers read one
 commitment earlier, see 06_listen_relay_payouts_grpc.py; both apply the same rules to the
 same flow, and maintenance/compare_listeners.py measures what the difference is worth.
 
@@ -109,8 +108,9 @@ async def listen(deadline, watched, emit, counts):
 
     `watched` is a set of base58 recipient addresses, empty for every recipient. There is
     no application filter here and there cannot be one: what identifies a payout as FOMO's
-    is the deposit on Robinhood Chain that its order id names. `Trade.key` is the
-    signature and `Trade.order_id` the order id, which is what joins it to that sell.
+    is the sell or payment on an EVM chain that its id names. `Trade.key` is the signature
+    and `Trade.order_id` the Relay order id or the intent id, which is what joins it to that
+    leg.
     """
     env.require("SOLANA_MAINNET_WSS")
 

@@ -18,8 +18,8 @@ are readable only by position.
 
 The registry records Robinhood Chain in full. On any other chain only what FOMO shares across
 all of them is inventoried — the EntryPoint, the delegation, Relay's depository, routers and
-executors — together with that chain's cash from `evmChains`: those are what its listeners
-subscribe to.
+executors, and the intent route's contract where `evmChains` says it runs — together with that
+chain's cash from `evmChains`: those are what its listeners subscribe to.
 
 The window is small by default: it covers the Uniswap V4 PoolManager, which carries every
 V4 pool on the chain and tens of thousands of swaps an hour, so a wide span spends most of
@@ -43,7 +43,7 @@ from web3 import Web3
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared import cli, env
-from shared.evm import CHAINS, DEPOSITORY, ENTRYPOINT, EXECUTORS, FOMO_IMPLEMENTATION, ROUTERS
+from shared.evm import CHAINS, DEPOSITORY, ENTRYPOINT, EXECUTORS, FOMO_IMPLEMENTATION, INTENT, ROUTERS
 
 network = cli.evm_chain()
 here = CHAINS[network]
@@ -59,6 +59,8 @@ def contracts():
         out = [("entryPoint", ENTRYPOINT, "ERC-4337 v0.8"), ("relayDepository", DEPOSITORY, "Relay")]
         out.append(("accountImplementation", "0x" + FOMO_IMPLEMENTATION, "7702 delegation target"))
         out += [("relayRouter", r, "Relay") for r in ROUTERS] + [("relayExecutor", e, "Relay") for e in EXECUTORS]
+        if reg["evmChains"][network].get("intentRoute"):
+            out.append(("intentRoute", INTENT, "the intent route"))
         cash = reg["evmChains"][network]["cash"]
         return out + [(c["symbol"], c["address"], f"{c['decimals']} decimals") for c in cash]
     out = []
@@ -84,9 +86,15 @@ def registry_names():
     """topic0 -> signature, from the registry's own event and swap-shape maps."""
     out = {}
     for topic, entry in reg["events"].items():
+        # Keys starting with `_` are notes. The intent route's events carry a label naming
+        # their role rather than an ABI signature, and are named by it.
+        if topic.startswith("_"):
+            continue
         abi = entry.get("abi", "")
         if "(" in abi:
             out[topic.lower()] = abi
+        elif entry.get("label"):
+            out[topic.lower()] = f"{entry['label']} (label)"
     for topic, shape in reg["venues"]["swapEventShapes"].items():
         out[topic.lower()] = shape.split(" - ")[0]
     return out

@@ -48,10 +48,10 @@ hits a node.
   `requests` — no `solders`/`solana` dependency unless something actually needs transaction
   construction.
 - **Ruff before a script is done.** `uvx ruff check scripts/` and `uvx ruff format scripts/`, both
-  clean; `.github/workflows/lint.yml` runs the same two on every push and pull request. No unused
-  imports, no dead code, no leftover helper nobody calls, and no `noqa` that has stopped
-  suppressing anything. Blind `except` is allowed on purpose, because an odd token or a flaky RPC
-  call must degrade to a printed "?" rather than kill a listener mid-run.
+  clean; `.github/workflows/lint.yml` runs the same two on every pull request and every push to
+  `main`. No unused imports, no dead code, no leftover helper nobody calls, and no `noqa` that has
+  stopped suppressing anything. Blind `except` is allowed on purpose, because an odd token or a
+  flaky RPC call must degrade to a printed "?" rather than kill a listener mid-run.
 - **Never commit a real private key, endpoint credential, or `.env`.** `.env.example` carries
   names only, and `*.local.*` files are gitignored scratch.
 - **Conventional Commits**, on branch commits and PR titles alike: `<type>(<scope>): <summary>`,

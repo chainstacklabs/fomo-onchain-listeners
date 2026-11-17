@@ -24,7 +24,7 @@ Elysium, so one table serves them all.
 |---|---|
 | `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108` | the operations contract — ERC-4337 v0.8 EntryPoint, the only version FOMO uses |
 | `0xe6cae83bde06e4c305530e199d7217f42808555b` | `Simple7702Account`, the reference implementation wallets delegate to |
-| `0xef0100e6cae83bde06e4c305530e199d7217f42808555b` | not an address — the wallet code every FOMO account carries, and on every chain but Robinhood Chain other applications' accounts too |
+| `0xef0100e6cae83bde06e4c305530e199d7217f42808555b` | not an address — the wallet code every FOMO account carries, and on BNB Smart Chain, Base, Ethereum and Monad other applications' accounts too |
 | `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | Relay depository — deposits land here |
 | `0x5567954cD026CEbFE486062cb75848e0f1c12E58` | Relay router — a solver's fill calls it, and its calldata ends with the order id |
 | `0x0729E2a4716d9f7dD17858d5d504426D228697f7` | Relay executor — moves the tokens; fills originate here |
@@ -54,7 +54,7 @@ Robinhood Chain, Base and Elysium. Ethereum and Monad have neither.
 | `0xc39f7e7ea5f6b65a384e76cc6225f9b5a872fbc5` | the router on Elysium |
 | `0x0005ea38eb0a69d1253508ebdbdb9ea8cb26b5ef` | the router on Robinhood Chain and Base |
 | `0x0005ea70fa6dbd2efd17697d2351301adb6318b2` | the router on BNB Smart Chain |
-| `0x9fc4e320a181e88644a302d11f1f158ef0699e37` | paid in the native asset beside every fill; a 171-byte contract on every chain but Elysium, where it has no code |
+| `0x9fc4e320a181e88644a302d11f1f158ef0699e37` | paid in the native asset beside most fills; a 171-byte contract on every chain but Elysium, where it has no code |
 | `0x0d231a9a7bca60a33783fb8459cede96440e0a7d` | the EOA that created the intent contract on each chain |
 
 The implementation behind the proxy on each chain is in

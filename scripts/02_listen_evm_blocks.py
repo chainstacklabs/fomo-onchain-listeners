@@ -32,7 +32,9 @@ reorganised block's logs out, since they belong to a hash nobody sweeps.
 
 A wallet's EIP-7702 delegation names the application behind it and is reported as
 `Trade.app`; FOMO is one tenant of Relay here, so that delegation is also the test that
-keeps the other tenants out. A wallet that has never operated on this chain has no
+keeps the other tenants out, together with the paymaster: where other applications share the
+delegation they sponsor their operations, so a deposit or a send from an operation naming a
+paymaster is theirs and counted. A wallet that has never operated on this chain has no
 delegation yet, so `claimed`, a test on the order id, lets a caller that knows the order is
 FOMO's — 00_listen_fomo.py — have that delivery reported anyway. `listen()` here is the one
 implementation of this transport; 00_listen_fomo.py imports it.
@@ -153,7 +155,7 @@ def sold_in_span(sent, user, tx, start, end, cash):
     return None
 
 
-def read_intents(trade_logs, receipts, calls):
+def read_intents(trade_logs, receipts, calls, cash):
     """One entry per trade through the intent route, read out of its receipt.
 
     (log, wallet, operation, moved, venue, order): the seller or buyer, the seller's own
@@ -163,7 +165,7 @@ def read_intents(trade_logs, receipts, calls):
     and the intent id.
     `receipts` maps a transaction to its logs and `calls` a fill's transaction to its
     `eth_getTransactionByHash` result. A buyer that could not be read is None and is
-    counted by the caller.
+    counted by the caller. `cash` is the chain's quote tokens, which never count as sold.
     """
     read = []
     for log in trade_logs:
@@ -179,7 +181,7 @@ def read_intents(trade_logs, receipts, calls):
         operations = {int(op["logIndex"], 16): op for op in logs if topic(op) == USEROP}
         start, end = span(operations, int(log["logIndex"], 16))
         venue = venues(swaps_in(logs), start, end)
-        read.append((log, user, operations.get(end), moved_from(logs, user, start, end), venue, order))
+        read.append((log, user, operations.get(end), moved_from(logs, user, start, end, cash), venue, order))
     return read
 
 
@@ -231,7 +233,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
         def mine(app):
             return app == "fomo"
 
-        # ---- one sweep, as four round trips and two decoding passes ----
+        # ---- one sweep: five round trips, then the decoding passes ----
         # Each returns None or False when a backend had not reached the range yet, which
         # means the same blocks are asked for again rather than reported short.
 
@@ -521,7 +523,7 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             fetched = await resolve_intents(trade_logs)
             if fetched is None:
                 return False
-            intents = read_intents(trade_logs, *fetched)
+            intents = read_intents(trade_logs, *fetched, here.cash)
 
             # A payment in ether and a payment in a token are the same trade seen from the
             # paying side, so they go through one list; the flag says which shape to read
@@ -546,9 +548,8 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
             emit_fills(fill_logs, app, swaps)
             emit_intents(intents, app)
             # Counted once the sweep has succeeded, since a retried one sees them again.
-            counts["intent-route events that are not trades"] += sum(
-                1 for log in intent_logs if topic(log) not in INTENT_TRADE_EVENTS
-            )
+            if others := sum(1 for log in intent_logs if topic(log) not in INTENT_TRADE_EVENTS):
+                counts["intent-route events that are not trades"] += others
             return True
 
         async with websockets.connect(websocket, open_timeout=OPEN_TIMEOUT, close_timeout=1) as socket:
@@ -567,10 +568,16 @@ async def listen(deadline, watched, emit, counts, chain="rh", claimed=None):
                 try:
                     async for raw in socket:
                         message = json.loads(raw)
+                        if message.get("id") == 1 and not message.get("result"):
+                            # Refused outright, which would otherwise surface only as a stall.
+                            raise RuntimeError(f"the node refused the newHeads subscription: {message.get('error')}")
                         if message.get("method") == "eth_subscription":
                             head = message["params"]["result"]
                             hashes[int(head["number"], 16)] = head["hash"]
                             latest = max(latest, int(head["number"], 16))
+                    # A socket closed politely ends the loop without raising; said so here
+                    # rather than left to read as a stall once the silence runs out.
+                    failure = ConnectionError("the node closed the newHeads subscription")
                 except asyncio.CancelledError:
                     pass
                 except Exception as err:

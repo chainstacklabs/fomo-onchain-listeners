@@ -1,16 +1,15 @@
 """How a listener prints a trade, and where the full one goes.
 
-The kinds a listener emits are defined here, once, because five listeners that disagree
-about what a word means are five listeners you cannot read side by side. Which chain
-produces which is a fact about how FOMO uses that chain: Solana holds the cash, the EVM
-chains hold the tokens, and only the EVM chain a token lives on names it at the moment it
-is bought.
+The kinds a listener emits are defined here, once, because listeners that disagree about
+what a word means cannot be read side by side. Which chain produces which is a fact about
+how FOMO uses that chain: Solana holds the cash, the EVM chains hold the tokens, and only
+the EVM chain a token lives on names it at the moment it is bought.
 
   BUY      EVM    a token delivered by one of the two routes across chains: out of
                   Relay's executor, or by the intent route's relayer. The first moment
                   that token is public, and the only event that ever names it
-  SELL     EVM    a token left a wallet and the proceeds went into a route: Relay's
-                  depository, or the intent route's contract
+  SELL     EVM    a non-cash token left a wallet and the proceeds went into a route:
+                  Relay's depository, or the intent route's contract
   PAY      any    cash into a route with nothing sold beside it: somebody is buying
                   something, or moving cash to Solana. It carries an amount and an id and
                   never the token, so it gives you the size and the wallet, never what was
@@ -18,7 +17,7 @@ is bought.
   SWAP     SOL    a trade that stayed on one chain: the wallet gave one asset and
                   received another, with neither route involved
   IN/OUT   SOL    a plain token movement into or out of a wallet
-  FILL     SOL    a solver paying out a sell made on another chain, from 05. Its recipient
+  FILL     SOL    a solver paying out a sell made on another chain, from 05 and 06. Its recipient
                   and id are readable; which application it belongs to is not, so only a
                   feed watching both chains can call one of these FOMO's
   OTHER    SOL    received but not classifiable: nothing the wallet owns changed, so
@@ -90,7 +89,7 @@ REPEAT = 40  # rows between reprints of the header, so a burst cannot scroll it 
 # what the eye looks for first, and leaves the width for what has to be read.
 KINDS = {"BUY": "32", "SELL": "31", "SWAP": "36", "PAY": "33", "IN": "32", "OUT": "31", "OTHER": "2"}
 KINDS["FILL"] = "32"
-CHAINS = {"RH": "35", "BSC": "33", "BASE": "36", "ETH": "37", "MON": "95", "SOL": "34"}
+CHAINS = {"RH": "35", "BSC": "33", "BASE": "36", "ETH": "37", "MON": "95", "ELY": "92", "SOL": "34"}
 CHAIN_WIDTH = max(map(len, CHAINS))  # the widest code, so "BASE" is never cut to "BA…"
 DIM = "2"
 NOMINAL = {"gave": 16, "got": 19, "who": 11, "note": 10, "where": 10, "key": 15}

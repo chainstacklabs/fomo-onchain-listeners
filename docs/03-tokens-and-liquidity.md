@@ -98,7 +98,7 @@ characters of one.
 Read from the chains. Robinhood Chain's venues and quote assets, from a pool census on 2026-08-31
 recorded in [`registry.json`](../scripts/maintenance/registry.json) and re-verified 2026-09-09 by
 [`maintenance/verify_registry.py`](../scripts/maintenance/verify_registry.py). The quote assets on
-the four other EVM chains, from the tokens wallets carrying FOMO's delegation deposited into Relay
+BNB Smart Chain, Base, Ethereum and Monad, from the tokens wallets carrying FOMO's delegation deposited into Relay
 on 2026-10-30, with symbol and decimals re-read by the verifier the same day; their venues, from the
 swap event shapes inside FOMO's fills and deposits on those chains the same day. Aerodrome's pools
 are named by the factory they report: 14 of 15 Solidly-shaped pools swapping on Base on 2026-10-30

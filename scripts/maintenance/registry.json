@@ -417,7 +417,7 @@
         "token (zero: native)",
         "amount"
       ],
-      "use": "Beside every fill: native paid from the contract to 0x9fc4e320a181e88644a302d11f1f158ef0699e37, a 171-byte contract on every chain but Elysium, where it has no code. Not a trade."
+      "use": "Beside most fills: native paid from the contract to 0x9fc4e320a181e88644a302d11f1f158ef0699e37, a 171-byte contract on every chain but Elysium, where it has no code. Not a trade."
     },
     "_intentLabels": "The intent route's contracts are unverified, so its events are recorded by topic with a label naming their role; the labels are not ABI names and nothing hashes them."
   },
@@ -823,7 +823,7 @@
     "wsolMint": "So11111111111111111111111111111111111111112",
     "settlement": {
       "solver": "F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe",
-      "what": "Delivers a Robinhood Chain sell's proceeds as USDC on Solana: a plain spl-token transfer into the seller's token account carrying the 32-byte Relay order id in an spl-memo.",
+      "what": "Delivers the proceeds of a sell made on an EVM chain as USDC on Solana: a plain spl-token transfer into the seller's token account carrying the 32-byte Relay order id in an spl-memo.",
       "memoPrograms": [
         "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
         "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo"
@@ -831,7 +831,7 @@
       "coSignerAbsent": "FOMO's co-signer signs nothing here and appears nowhere in the transaction, so blockSubscribe or gRPC filtered on the co-signer never delivers a settlement. The sell is visible on Robinhood Chain only.",
       "findingItAgain": "getSignaturesForAddress on the seller's wallet does not return these - an spl-token transfer names the token account, not its owner. Query the USDC token account from getTokenAccountsByOwner.",
       "observed": "Over Robinhood blocks 57767865-57782865 (25 minutes), 166 deposits were settled by this address. Across 400 signatures on 15 sellers' USDC token accounts, all 120 memo-carrying deliveries came from it and no second solver appeared.",
-      "note": "Relay's solver addresses rotate the way this chain's bundlers do. Re-check before relying on the address; the memo and the token-account rule hold regardless of who signs.",
+      "note": "Relay's solver addresses rotate the way the EVM chains' bundlers do. Re-check before relying on the address; the memo and the token-account rule hold regardless of who signs.",
       "verifiedAt": "2026-09-08"
     },
     "verifiedAt": "2026-09-06",

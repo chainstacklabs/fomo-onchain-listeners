@@ -33,13 +33,13 @@ Emits FILL, defined in shared/feed.py: money leaving a solver, with the recipien
 id that says which sell it settles. `Trade.app` is left empty because this chain
 cannot answer it.
 
-Solver addresses rotate. When this one is replaced the stream goes quiet rather than wrong,
+Solver addresses rotate. When one is replaced the stream goes quiet rather than wrong,
 so a run that reports no payouts at all is a reason to re-check the address rather than to
 conclude that nobody sold; both are in maintenance/registry.json under `solana.settlement` and
 `solana.intent`, and maintenance/verify_registry.py checks them.
 
 Needs a Geyser endpoint, a paid add-on at most providers. For a standard WebSocket instead,
-see 05_listen_relay_payouts_blocks.py; both read the same solver by the same rules.
+see 05_listen_relay_payouts_blocks.py; both read the same solvers by the same rules.
 
 Reference: docs/04-listening.md (Solana, Joining the two legs), docs/05-crossing.md (Solvers, The intent route).
 
@@ -128,8 +128,9 @@ async def listen(deadline, watched, emit, counts):
 
     `watched` is a set of base58 recipient addresses, empty for every recipient. There is
     no application filter here and there cannot be one: what identifies a payout as FOMO's
-    is the deposit on Robinhood Chain that its order id names. `Trade.key` is the
-    signature and `Trade.order_id` the order id, which is what joins it to that sell.
+    is the sell or payment on an EVM chain that its id names. `Trade.key` is the signature
+    and `Trade.order_id` the Relay order id or the intent id, which is what joins it to that
+    leg.
     """
     env.require("GEYSER_ENDPOINT", "GEYSER_API_TOKEN")
 
