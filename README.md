@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  • <a target="_blank" href="https://chainstack.com/">Homepage</a> •
-  <a target="_blank" href="https://chainstack.com/protocols/">Supported protocols</a> •
-  <a target="_blank" href="https://chainstack.com/blog/">Chainstack blog</a> •
-  <a target="_blank" href="https://docs.chainstack.com/quickstart/">Blockchain API reference</a> • <br> 
-  • <a target="_blank" href="https://console.chainstack.com/user/account/create">Start for free</a> •
+  • <a target="_blank" href="https://chainstack.com/?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners">Homepage</a> •
+  <a target="_blank" href="https://chainstack.com/protocols/?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners">Supported protocols</a> •
+  <a target="_blank" href="https://chainstack.com/blog/?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners">Chainstack blog</a> •
+  <a target="_blank" href="https://docs.chainstack.com/reference/blockchain-apis?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners">Blockchain API reference</a> • <br> 
+  • <a target="_blank" href="https://console.chainstack.com/sign-up?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners">Start for free</a> •
 </p>
 
 # FOMO onchain
@@ -193,10 +193,10 @@ tells FOMO apart from every other tenant of the same contracts, are worked throu
 
 ## Endpoints
 
-[Chainstack](https://chainstack.com) serves every chain here with WebSocket endpoints:
-[Robinhood Chain](https://docs.chainstack.com/reference/robinhood-getting-started), BNB Smart Chain,
+[Chainstack](https://chainstack.com/?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners) serves every chain here with WebSocket endpoints:
+[Robinhood Chain](https://docs.chainstack.com/reference/robinhood-getting-started?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners), BNB Smart Chain,
 Base, Ethereum, Monad, Elysium and Solana mainnet. Solana also offers the
-[Yellowstone gRPC Geyser plugin](https://docs.chainstack.com/docs/yellowstone-grpc-geyser-plugin).
+[Yellowstone gRPC Geyser plugin](https://docs.chainstack.com/docs/yellowstone-grpc-geyser-plugin?utm_source=github&utm_medium=referral&utm_campaign=fomo-onchain-listeners).
 
 Robinhood Chain is an
 [Arbitrum Orbit](https://docs.arbitrum.io/launch-orbit-chain/orbit-gentle-introduction) chain whose
